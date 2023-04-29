@@ -5,10 +5,15 @@ open System
 open System.Collections.Generic
 open System.Reactive.Linq
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+open System.Threading
 open FSharp.Control.Reactive
 
 type Async<'T> with
     member inline my.toObservable() = Observable.ofAsync my
+    
+    member my.startImmediately([<Optional>] cancellation_token :CancellationToken voption) =
+        Async.StartImmediateAsTask(my, cancellation_token.defaultValue(CancellationToken.None))
 
 type IObservable<'T> with
     member inline my.concat(another) = my |> Observable.concat another
@@ -40,8 +45,15 @@ type IEnumerable<'T> with
     member my.choose f =
         my.collect(fun x -> match f x with ValueSome v -> Seq.singleton v | ValueNone -> Seq.empty)
         
+    member my.tryFirst() =
+        use itor = my.GetEnumerator()
+        in itor.next()
+        
+    member my.tryPick (f :'T -> 'a voption) =
+        my.choose(f).tryFirst()
+        
     member my.join delimiter =
-        let itor = my.GetEnumerator()
+        use itor = my.GetEnumerator()
         let mutable current = itor.next()
         seq {
             while itor.MoveNext() do
@@ -54,6 +66,14 @@ type IEnumerable<'T> with
         
 [<Extension>]
 type EnumerableExtensions =
+    [<Extension>]
+    static member inline fst(my :struct ('K*'V)) =
+        let struct (v, _) = my in v
+    
+    [<Extension>]
+    static member inline snd(my :struct ('K*'V)) =
+        let struct (_, v) = my in v
+        
     [<Extension>]
     static member toMap(my :struct ('K*'V) seq) =
         my.fold(Map.empty, fun m x -> let struct (k,v) = x in m.Add(k,v))

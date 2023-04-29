@@ -10,6 +10,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{E1F8D3DD-28AC-4A26-AA78-8776D6DAFF03}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
+		db\schema.ttl = db\schema.ttl
 	EndProjectSection
 EndProject
 Global
