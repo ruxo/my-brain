@@ -9,7 +9,7 @@ type Index() =
 
     override _.Render() =
 #if DEBUG       
-        html.hotReloadComp (Tirax.KMS.App.app, "Tirax.KMS.App.app")
+        html.hotReloadComp (app, "Tirax.KMS.App.app")
 #else
         Tirax.KMS.App.app
 #endif
