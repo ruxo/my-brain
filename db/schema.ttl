@@ -1,0 +1,19 @@
+prefix : <http://ruxoz.net/rdfs/schema/knowledge/>
+prefix m: <http://ruxoz.net/rdfs/model/knowledge/>
+prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+prefix xsd: <http://www.w3.org/2001/XMLSchema#>
+prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+:Context a rdf:Class .
+:Owner a rdf:Class; rdfs:subClassOf :Context.
+:note a rdf:Property ; rdfs:range xsd:string .
+:link a rdf:Property ; rdfs:range xsd:string .
+
+:contains a rdf:Property; rdfs:domain :Owner; rdfs:range :Context.
+:relates a rdf:Property ; rdfs:domain :Context; rdfs:range :Context.
+
+:Tag a rdf:Class .
+:Topic a rdf:Class; rdfs:subClassOf :Tag.
+:HowTo a rdf:Class; rdfs:subClassOf :Tag.
+:Root a rdf:Class; rdfs:subClassOf :Tag.
+:home a rdf:Property; rdfs:domain :Root; rdfs:range :Context.
