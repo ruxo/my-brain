@@ -11,6 +11,7 @@ open RZ.FSharp.Extension
 open Fun.Blazor
 open Fun.Blazor.Operators
 open MudBlazor
+open Tirax.KMS.Pages
 open Server
 open AppModel
     
@@ -87,15 +88,22 @@ let private drawer =
     }
     
 let app = html.inject(fun (server :Server) ->
-    MudLayout'() {
-        topBar server
-        drawer
-        
-        MudMainContent'() {
-            div {
-                classes  ["ma-3"; "pa-3"]
-                
-                Pages.Main(server)
+    fragment {
+        // Providers need to be with app in order to create/destroy with app rendering
+        MudThemeProvider'.create()
+        MudDialogProvider'.create()
+        MudSnackbarProvider'.create()
+                    
+        MudLayout'() {
+            topBar server
+            drawer
+            
+            MudMainContent'() {
+                div {
+                    classes  ["ma-3"; "pa-3"]
+                    
+                    Pages.Main(server)
+                }
             }
         }
     }

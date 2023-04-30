@@ -22,6 +22,9 @@ let uiAsync x = async {
     | e -> return (LoadError e)
 }
 
+let ConceptTitleTextSize       = Typo.h3
+let ConceptDetailTitleTextSize = Typo.h4
+
 [<RequireQualifiedAccess>]
 module AVal =
     let inline ofAsync def (v :Async<'a>) = v |> Async.StartAsTask |> AVal.ofTask def :?> cval<'a>

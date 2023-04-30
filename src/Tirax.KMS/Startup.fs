@@ -20,7 +20,6 @@ builder.Services.AddServerSideBlazor()
 builder.Services.AddFunBlazorServer()
 builder.Services.AddMudServices()
 
-
 let app = builder.Build()
 
 app.UseStaticFiles()

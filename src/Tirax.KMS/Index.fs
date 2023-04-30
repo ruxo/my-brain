@@ -2,7 +2,6 @@ namespace Tirax.KMS
 
 open Microsoft.AspNetCore.Mvc.Rendering
 open Fun.Blazor
-open MudBlazor
 
 type Index() =
     inherit FunBlazorComponent()
@@ -30,10 +29,6 @@ type Index() =
                     stylesheet "_content/MudBlazor/MudBlazor.min.css"
                 }
                 body {
-                    MudThemeProvider'.create()
-                    MudDialogProvider'.create()
-                    MudSnackbarProvider'.create()
-                    
                     rootComp<Index> ctx RenderMode.ServerPrerendered
                     
                     script { src "_content/MudBlazor/MudBlazor.min.js" }
