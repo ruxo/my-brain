@@ -36,32 +36,41 @@ let inline private topBar (server :Server) =
     MudAppBar'() {
         Elevation 1
         
-        adaptiview() {
-            let! drawer_open, setOpen = drawer_open.WithSetter()
+        MudStack'() {
+            Row        true
+            AlignItems AlignItems.End
+            Spacing    2
             
-            MudIconButton'() {
-                Icon    Icons.Material.Filled.Menu
-                Color   Color.Inherit
-                Edge    Edge.Start
-                OnClick(fun _ -> setOpen(not drawer_open))
+            div {
+                adaptiview() {
+                    let! drawer_open, setOpen = drawer_open.WithSetter()
+                    
+                    MudIconButton'() {
+                        Icon    Icons.Material.Filled.Menu
+                        Color   Color.Inherit
+                        Edge    Edge.Start
+                        OnClick(fun _ -> setOpen(not drawer_open))
+                    }
+                }
+                
+                MudLink'() {
+                    Typo      Typo.h5
+                    Color     Color.Surface
+                    Underline Underline.None
+                    Classes   ["mx-3"]
+                    
+                    OnClick(fun _ -> setMainTopic(RootTopic))
+                    
+                    "Tirax KMS"
+                }
             }
-        }
-        
-        MudLink'() {
-            Typo      Typo.h5
-            Color     Color.Surface
-            Underline Underline.None
-            Classes   ["mx-3"]
-            
-            OnClick(fun _ -> setMainTopic(RootTopic))
-            
-            "Tirax KMS"
-        }
-        div {
-            adaptiview() {
-                let! history = history
-                let! history = server.fetch(history.rev()).toUICVal()
-                history |> loadingSection(fun list -> list.map(showLink).join(html.raw " ⪧ ") |> html.mergeNodes)
+            div {
+                
+                adaptiview() {
+                    let! history = history
+                    let! history = server.fetch(history.rev()).toUICVal()
+                    history |> loadingSection(fun list -> list.map(showLink).join(html.raw " ⪧ ") |> html.mergeNodes)
+                }
             }
         }
     }
@@ -83,9 +92,9 @@ let app = html.inject(fun (server :Server) ->
         drawer
         
         MudMainContent'() {
-            MudPaper'() {
-                Outlined true
-                Classes  ["mx-3"]
+            div {
+                classes  ["ma-3"; "pa-3"]
+                
                 Pages.Main(server)
             }
         }

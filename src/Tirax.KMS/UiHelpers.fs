@@ -36,7 +36,15 @@ type ChangeableValue<'T> with
     
 let loadingSection renderer = function
 | Loading -> html.raw "💿"
-| LoadError e -> p { e.ToString() }
+| LoadError e -> MudAlert'() {
+                     Severity  Severity.Warning
+                     
+                     div {
+                         div { "Loading failed. Please try again later." }
+                         MudDivider'.create()
+                         div { e.ToString() }
+                     }
+                 }
 | Data data -> renderer data
 
 let showLink (concept :Domain.Concept) =
