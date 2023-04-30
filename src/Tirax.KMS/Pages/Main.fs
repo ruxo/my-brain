@@ -23,13 +23,14 @@ module private MainPage =
             
             ItemTemplate(
                 fun (struct (level, concept) as p) ->
+                    let should_expand = level < 1
                     if level < 3 then
                         adaptiview(isStatic=true){
                             let! sub_sub_topics = server.fetch(concept.contains).toCVal(Seq.empty)
                             let sub_sub_items = createModel(level+1, sub_sub_topics)
                             MudTreeViewItem'() {
                                 Items    sub_sub_items
-                                Expanded true
+                                Expanded should_expand
                                 Text     concept.name
                                 value    p
                             }
@@ -58,7 +59,12 @@ module private MainPage =
                     MudText'() { Typo Typo.h4; "References" }
                     
                     let link = topic.link.Value.ToString()
-                    MudLink'() { Href link; link }
+                    MudLink'() {
+                        Href   link
+                        Target "_blank"
+                        
+                        link
+                    }
                 }
             
             if topic.note.IsSome then
