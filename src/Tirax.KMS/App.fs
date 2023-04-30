@@ -5,98 +5,89 @@
 [<AutoOpen>]
 module Tirax.KMS.App
 
+open Microsoft.AspNetCore.Components.Routing
 open FSharp.Data.Adaptive
-open Fun.Blazor
 open RZ.FSharp.Extension
-open Domain
+open Fun.Blazor
+open Fun.Blazor.Operators
+open MudBlazor
 open Server
-
-[<Literal>]
-let RootTopic = "brain"
-
-[<Literal>]
-let MaxHistory = 10
-
-let current_topic = cval(RootTopic)
-let history = cval(System.Collections.Generic.List<ConceptId>(MaxHistory + 1))
-
-let setMainTopic topic =
-    Transaction.transact(fun _ ->
-        let list = history.Value
-        list.Add(topic)
-        if list.Count > MaxHistory then list.RemoveAt(0)
-        history.Value <- list
-        current_topic.Value <- topic
-    )
+open AppModel
     
-let loadingSection renderer = function
-| Loading -> html.raw "💿"
-| LoadError e -> p { e.ToString() }
-| Data data -> renderer data
-
-let showLink concept =
-    a {
-        onclick(fun _ -> setMainTopic concept.id)
-        concept.name
+type MudNavLink with
+    static member inline of'(path, title :string, ?match' :NavLinkMatch) =
+        MudNavLink'(){
+            Href path
+            if match'.IsSome then "Match" => match'.Value else Internal.emptyAttr()
+            title
+        }
+    
+let private navigation =
+    MudNavMenu'() {
+        MudNavLink.of'("/", "Home", NavLinkMatch.All)
+        MudNavGroup'() {
+            Title "Favorites"
+        }
     }
     
-let renderLinks (server :Server) (topic :Concept) =
-    fragment {
-        h1 { topic.name }
-        
-        if topic.link.IsSome then
-            h2 { "References" }
-            
-            a { topic.link.Value.ToString() }
+let private drawer_open = cval(false)
+
+let inline private topBar (server :Server) =
+    MudAppBar'() {
+        Elevation 1
         
         adaptiview() {
-            let! sub_topics_result = server.fetch(topic.contains).toUICVal()
-            sub_topics_result |> loadingSection (fun sub_topics ->
-                ul {
-                    childContent (sub_topics.map(fun concept ->
-                        li {
-                            showLink concept
-                            br
-                            if not concept.contains.IsEmpty then
-                                adaptiview() {
-                                    let! sub_topics3 = server.fetch(concept.contains).toCVal(Seq.empty)
-                                    ul {
-                                        childContent [for topic3 in sub_topics3 -> li { showLink topic3 }]
-                                    }
-                                }
-                        }
-                    ))
-                }
-            )
+            let! drawer_open, setOpen = drawer_open.WithSetter()
+            
+            MudIconButton'() {
+                Icon    Icons.Material.Filled.Menu
+                Color   Color.Inherit
+                Edge    Edge.Start
+                OnClick(fun _ -> setOpen(not drawer_open))
+            }
         }
         
-        if topic.note.IsSome then
-            h2 { "Note" }
-            p { topic.note.Value }
+        MudLink'() {
+            Typo      Typo.h5
+            Color     Color.Surface
+            Underline Underline.None
+            Classes   ["mx-3"]
+            
+            OnClick(fun _ -> setMainTopic(RootTopic))
+            
+            "Tirax KMS"
+        }
+        div {
+            adaptiview() {
+                let! history = history
+                let! history = server.fetch(history.rev()).toUICVal()
+                history |> loadingSection(fun list -> list.map(showLink).join(html.raw " ⪧ ") |> html.mergeNodes)
+            }
+        }
+    }
+    
+let private drawer =
+    adaptiview() {
+        let! is_open = drawer_open
+        MudDrawer'() {
+            ClipMode  DrawerClipMode.Always
+            Elevation 2
+            Open      is_open
+            navigation
+        }
     }
     
 let app = html.inject(fun (server :Server) ->
-    adaptiview() {
-        let! topic = current_topic
-        let! history = server.fetch(history.Value).toUICVal()
-        div {
-            childContent(seq {
-                button {
-                    onclick (fun _ -> setMainTopic RootTopic)
-                    "Home"
-                }
-                html.raw "&nbsp;"
-                history |> loadingSection(fun list ->
-                    list.map(showLink).join(html.raw " ⪧ ") |> html.mergeNodes
-                )
-            })
-        }
+    MudLayout'() {
+        topBar server
+        drawer
         
-        let! result = server.fetch(topic).toUICVal()
-        result |> loadingSection (fun concept ->
-            match concept with
-            | ValueSome c -> renderLinks server c
-            | ValueNone -> h1 { $"Invalid topic: {topic}" }
-        )
+        MudMainContent'() {
+            MudPaper'() {
+                Outlined true
+                Classes  ["mx-3"]
+                Pages.Main(server)
+            }
+        }
     }
 )

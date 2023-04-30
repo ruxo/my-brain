@@ -7,7 +7,7 @@ open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.DependencyInjection
 open Tirax.KMS.Server
 open Tirax.KMS.Stardog
-
+open MudBlazor.Services
 
 let builder = WebApplication.CreateBuilder(Environment.GetCommandLineArgs())
 
@@ -16,7 +16,9 @@ let connection_string = builder.Configuration.GetConnectionString("Stardog")
 builder.Services.AddSingleton(connection_string |> StardogConnection.from |> Stardog)
 builder.Services.AddSingleton<Server>()
 builder.Services.AddControllersWithViews()
-builder.Services.AddServerSideBlazor().Services.AddFunBlazorServer()
+builder.Services.AddServerSideBlazor()
+builder.Services.AddFunBlazorServer()
+builder.Services.AddMudServices()
 
 
 let app = builder.Build()

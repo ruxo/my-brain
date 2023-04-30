@@ -4,8 +4,9 @@ module Tirax.KMS.UiHelpers
 open System.Runtime.CompilerServices
 open System.Threading.Tasks
 open FSharp.Data.Adaptive
-open Fun.Blazor.DslAdaptive
+open Fun.Blazor
 open Fun.Result
+open MudBlazor
 
 [<Struct; IsReadOnly>]
 type UiAsyncResult<'T> =
@@ -32,3 +33,17 @@ type Async<'T> with
     
 type ChangeableValue<'T> with
     member inline my.schedule (task :Task<'T>) = task |> Task.map my.Publish |> ignore; my
+    
+let loadingSection renderer = function
+| Loading -> html.raw "💿"
+| LoadError e -> p { e.ToString() }
+| Data data -> renderer data
+
+let showLink (concept :Domain.Concept) =
+    MudLink'() {
+        Color Color.Info
+        
+        onclick(fun _ -> AppModel.setMainTopic concept.id)
+        
+        concept.name
+    }
