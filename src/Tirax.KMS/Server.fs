@@ -5,10 +5,11 @@ open System.Runtime.CompilerServices
 open System.Threading.Tasks
 open RZ.FSharp.Extension
 open RZ.FSharp.Extension.ValueOption
-open Tirax.KMS.Domain
-open Tirax.KMS.Stardog
 open VDS.RDF
 open VDS.RDF.Query
+open Tirax.KMS
+open Tirax.KMS.Domain
+open Tirax.KMS.Stardog
 
 [<Literal>]
 let ConceptNamespace = "http://ruxoz.net/rdfs/schema/knowledge/"
@@ -24,6 +25,19 @@ let RdfNamespace = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 
 [<Literal>]
 let RdfsNamespace = "http://www.w3.org/2000/01/rdf-schema#"
+
+let StardogDefaultNamespace = Uri("stardog:context:default")
+
+let private configureNamespaces(namespaces :INamespaceMapper) =
+    namespaces.AddNamespace(""    , UriFactory.Create(ConceptNamespace    ))
+    namespaces.AddNamespace("m"   , UriFactory.Create(ConceptDataNamespace))
+    namespaces.AddNamespace("xsd" , UriFactory.Create(XmlSchemaNamespace  ))
+    namespaces.AddNamespace("rdf" , UriFactory.Create(RdfNamespace        ))
+    namespaces.AddNamespace("rdfs", UriFactory.Create(RdfsNamespace       ))
+    
+let private createGraph() =
+    Graph(StardogDefaultNamespace)
+    |> sideEffect (Graph.namespaceMap >> configureNamespaces)
 
 let private tryNamespace (namespace' :string) (s :string) =
     if s.StartsWith(namespace')
@@ -167,40 +181,11 @@ type ServerState = {
     concepts :Map<ConceptId, Concept>
 }
 
-[<Struct; IsReadOnly>]
-type ModelOperationType<'T> =
-    | Add of add:'T
-    | Update of update:'T
-    | Delete of delete:'T
-
-[<Extension>]
-type ModelOperationTypeExtensions =
-    [<Extension>]
-    static member inline apply<'T when 'T: comparison> (operation :ModelOperationType<'T>, s :Set<'T>) =
-        match operation with
-        | Add x -> s.Add(x)
-        | Update x -> if not (s.Contains x) then s.Add(x) else s
-        | Delete x -> s.Remove(x)
-        
-    [<Extension>]
-    static member inline apply(operation :ModelOperationType<'T>, m :Map<'K,'T>, keyIdentifier :'T -> 'K) =
-        match operation with
-        | Add x -> m.Add(keyIdentifier x, x)
-        | Update x -> m.Change(keyIdentifier x, constant (Some x))
-        | Delete x -> m.Remove(keyIdentifier x)
-    
-[<Struct; IsReadOnly>]
-type ModelChange =
-    | Tag     of tag:ModelOperationType<ConceptTag>
-    | Concept of concept:ModelOperationType<Concept>
-    
-type ChangeLogs = ModelChange seq
-
 module ChangeLogs =
     let apply state changes =
         let new' = changes |> Seq.fold (fun last -> function
-                                        | Concept c -> { last with concepts = c.apply(last.concepts, fun ct -> ct.id) }
-                                        | Tag t -> { last with tags = t.apply(last.tags, fun tag -> tag.id) }
+                                        | ConceptChange c         -> { last with concepts = c.apply(last.concepts, fun ct -> ct.id) }
+                                        | ModelChange.Tag t -> { last with tags = t.apply(last.tags, fun tag -> tag.id) }
                                         ) state
         { new' with version = new'.version + 1UL }
     
@@ -227,7 +212,9 @@ module Operations =
     let private updateState state graph_result =
         let concepts = getConcepts(state.tags, graph_result).cache()
         let existing, new' = concepts.toArray() |> Array.partition (fun concept -> state.concepts.containsKey(concept.id))
-        let changes = new'.map(Add >> Concept).append(existing.map (Update >> Concept))
+        let existing_dict = existing.map(fun c -> struct (c.id, c)).toMap()
+        let makeUpdate concept = Update(existing_dict[concept.id], concept) |> ModelChange.ConceptChange
+        let changes = new'.map(Add >> ModelChange.ConceptChange).append(existing.map makeUpdate)
         struct (changes, concepts.toMap(fun c -> c.id))
         
     let fetch (db :Stardog) id state = async {
@@ -246,13 +233,14 @@ module Operations =
             return struct (changes, ids.choose(map.tryGet))
     }
     
-    let addConcept(db :Stardog, concept, target) state =
+    let addConcept(db :Stardog, concept, target) _ =
         async {
             let updated = { target with contains = target.contains.Add(concept.id) }
             let changes = seq {
-                              Concept(Add    concept)
-                              Concept(Update updated)
+                              ConceptChange(Add concept)
+                              ConceptChange(Update(target, updated))
                           }
+            do! db.apply(changes)
             return struct (changes, updated)
         }
 
@@ -314,6 +302,4 @@ type Server(db :Stardog) =
     }
     
     member my.addConcept(new_concept, topic) =
-        async {
-            return! my.transact(Operations.addConcept(db, new_concept, topic))
-        }
+        my.transact(Operations.addConcept(db, new_concept, topic))

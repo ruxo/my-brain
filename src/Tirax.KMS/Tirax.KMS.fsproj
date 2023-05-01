@@ -21,6 +21,7 @@
 		<Compile Include="Fun.Blazor.Bindings\Microsoft.AspNetCore.Components.Authorization.fs" />
 		<Compile Include="ObservableExtensions.fs" />
 		<Compile Include="Domain.fs" />
+		<Compile Include="ChangeLogs.fs" />
 		<Compile Include="Stardog.fs" />
 		<Compile Include="Server.fs" />
 		<Compile Include="AppModel.fs" />

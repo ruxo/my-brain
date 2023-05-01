@@ -88,7 +88,7 @@ type AddConceptDialog() =
                 
                 adaptiview(isStatic = true) {
                     let! note, setNote = vm.note.WithSetter()
-                    MudTextField'<string>() { Label "Note"; Required(false); Variant(Variant.Filled); Lines(10); Value(note); ValueChanged(setNote) }
+                    MudTextField'<string>() { Label("Note"); Required(false); Variant(Variant.Filled); Lines(10); Value(note); ValueChanged(setNote) }
                 }
                 adaptiview(isStatic = true) {
                     let! overriden, setOverriden = slug_overriden.WithSetter()
