@@ -90,7 +90,7 @@ let RdfNamespace = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 [<Literal>]
 let RdfsNamespace = "http://www.w3.org/2000/01/rdf-schema#"
 
-let StardogDefaultNamespace = UriFactory.Create("stardog:context:default")
+let StardogDefaultNamespace = UriFactory.Create("tag:stardog:api:context:default")
 
 let private configureNamespaces(namespaces :INamespaceMapper) =
     namespaces.AddNamespace(""    , UriFactory.Create(ConceptNamespace    ))

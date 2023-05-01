@@ -49,30 +49,43 @@ module private MainPage =
         }
 
     let inline private renderConceptTitle(server :Server, topic :Concept, setTopic :Concept -> unit) =
+        let saving_status = cval(false)
         html.inject(fun (dialog_service :IDialogService) ->
-            let showDialog() =
-                task {
-                    match! AddConceptDialog.Show(dialog_service) with
-                    | ValueSome concept -> let! updated_topic = server.addConcept(concept, topic)
-                                           in setTopic(updated_topic)
-                    | ValueNone         -> ()
-                }
-                
-            MudStack'() {
-                Row     true
-                Spacing 2
-                
-                MudText'() { Typo ConceptTitleTextSize; topic.name }
-                MudFab'() { StartIcon Icons.Material.Filled.Add     ; Color Color.Primary  ; OnClick(fun _ -> showDialog()) }
-                MudFab'() {
-                    StartIcon Icons.Material.Filled.Bookmark
-                    Label     "Bookmark"
-                    Disabled  true
-                }
-                MudFab'() {
-                    StartIcon Icons.Material.Filled.Edit
-                    Color     Color.Secondary
-                    Disabled  true
+            adaptiview() {
+                let! saving, setSaving = saving_status.WithSetter()
+                let showDialog() =
+                    task {
+                        match! AddConceptDialog.Show(dialog_service) with
+                        | ValueSome concept -> setSaving(true)
+                                               try
+                                                   let! updated_topic = server.addConcept(concept, topic)
+                                                   in setTopic(updated_topic)
+                                               finally
+                                                   setSaving(false)
+                        | ValueNone         -> ()
+                    }
+                    
+                MudStack'() {
+                    Row     true
+                    Spacing 2
+                    
+                    MudText'() { Typo ConceptTitleTextSize; topic.name }
+                    MudFab'() {
+                        StartIcon(if saving then Icons.Material.Filled.Savings else Icons.Material.Filled.Add)
+                        Color    (if saving then Color.Dark else Color.Primary)
+                        Disabled (saving)
+                        OnClick  (fun _ -> showDialog())
+                    }
+                    MudFab'() {
+                        StartIcon(Icons.Material.Filled.Bookmark)
+                        Label    ("Bookmark")
+                        Disabled (true)
+                    }
+                    MudFab'() {
+                        StartIcon(Icons.Material.Filled.Edit)
+                        Color    (Color.Secondary)
+                        Disabled (true)
+                    }
                 }
             }
         )

@@ -26,7 +26,7 @@ let RdfNamespace = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 [<Literal>]
 let RdfsNamespace = "http://www.w3.org/2000/01/rdf-schema#"
 
-let StardogDefaultNamespace = Uri("stardog:context:default")
+let StardogDefaultNamespace = Uri("tag:stardog:context:default")
 
 let private configureNamespaces(namespaces :INamespaceMapper) =
     namespaces.AddNamespace(""    , UriFactory.Create(ConceptNamespace    ))
@@ -126,6 +126,12 @@ let private extractProperty property value =
     let property_uri = SparqlNode.getUri property
     match property_uri with
     | RDFS       (_,t) when t = "label" -> SparqlNode.getLiteral(value).AsString() |> RdfLabel |> RDF
+    | RDFS       (_,t) when t = "type"  -> match SparqlNode.getUri value with
+                                           | RDFPattern  t -> RDF (RdfClass t)
+                                           | ConceptType t -> RDF (RdfClass t)
+                                           | XMLSchema   t -> RDF (RdfClass t)
+                                           | RDFS        t -> RDF (RdfClass t)
+                                           | _ -> failwithf $"Unrecognize type {value}"
     | RDFPattern (_,t) when t = "type"  -> match SparqlNode.getUri value with
                                            | RDFPattern  t -> RDF (RdfClass t)
                                            | ConceptType t -> RDF (RdfClass t)
