@@ -208,7 +208,7 @@ type TransactionResult<'T> = ServerState -> Async<struct (ChangeLogs * 'T)>
 
 module Operations =
     let private from (tag_map :Map<ConceptId,ConceptTag>) struct (id, props :ConceptProperties seq) =
-        let new_concept = { Concept.Empty with id = id }
+        let new_concept = { Concept.empty with id = id }
         props.fold(new_concept, fun concept p ->
                    match p with
                    | RDF (RdfLabel label)    -> { concept with name=label }
@@ -216,8 +216,8 @@ module Operations =
                                                 then { concept with tags=concept.tags.Add(id) }
                                                 else   concept
                    | Contains id             -> { concept with contains=concept.contains.Add(id) }
-                   | Note note               -> { concept with note=Some(note) }
-                   | Link link               -> { concept with link=Some(link) }
+                   | Note note               -> { concept with note=ValueSome(note) }
+                   | Link link               -> { concept with link=ValueSome(link) }
                    | _                       -> failwith $"Not support property %A{p}"
                    )
         
@@ -245,6 +245,16 @@ module Operations =
             let struct (changes, map) = updateState state graph_result
             return struct (changes, ids.choose(map.tryGet))
     }
+    
+    let addConcept(db :Stardog, concept, target) state =
+        async {
+            let updated = { target with contains = target.contains.Add(concept.id) }
+            let changes = seq {
+                              Concept(Add    concept)
+                              Concept(Update updated)
+                          }
+            return struct (changes, updated)
+        }
 
 type Server(db :Stardog) =
     let mutable snapshot =
@@ -302,3 +312,8 @@ type Server(db :Stardog) =
         let! fetched_concepts = my.transact(Operations.fetchMany db need_fetches)
         return existed.append(fetched_concepts)
     }
+    
+    member my.addConcept(new_concept, topic) =
+        async {
+            return! my.transact(Operations.addConcept(db, new_concept, topic))
+        }

@@ -47,58 +47,69 @@ module private MainPage =
                         }
                 )
         }
-    
-    let renderConcept (server :Server) (topic :Concept) =
-        let show_dialog = cval(false)
-        html.inject(fun (dialog_service :IDialogService) ->
-            let opts = DialogOptions(CloseOnEscapeKey = true)
 
+    let inline private renderConceptTitle(server :Server, topic :Concept, setTopic :Concept -> unit) =
+        html.inject(fun (dialog_service :IDialogService) ->
             let showDialog() =
-                dialog_service.Show<AddConceptDialog>("Sample dialog") |> ignore
-            
-            fragment {
-                adaptiview() {
-                    let! show, setShow = show_dialog.WithSetter()
-                    
-                    MudStack'() {
-                        Row     true
-                        Spacing 2
-                        
-                        MudText'() { Typo ConceptTitleTextSize; topic.name }
-                        MudFab'() { StartIcon Icons.Material.Filled.Add     ; Color Color.Primary  ; OnClick(fun _ -> showDialog()) }
-                        MudFab'() { StartIcon Icons.Material.Filled.Bookmark; Label "Bookmark"      }
-                        MudFab'() { StartIcon Icons.Material.Filled.Edit    ; Color Color.Secondary }
-                    }
+                task {
+                    match! AddConceptDialog.Show(dialog_service) with
+                    | ValueSome concept -> let! updated_topic = server.addConcept(concept, topic)
+                                           in setTopic(updated_topic)
+                    | ValueNone         -> ()
                 }
                 
-                MudDivider'.create()
+            MudStack'() {
+                Row     true
+                Spacing 2
                 
-                if not topic.contains.IsEmpty then
-                    adaptiview() {
-                        let! sub_topics_result = server.fetch(topic.contains).toUICVal()
-                        sub_topics_result |> loadingSection(renderSubTopics server)
-                    }
-                
-                if topic.link.IsSome then
-                    MudPaper'() {
-                        MudText'() { Typo ConceptDetailTitleTextSize; "References" }
-                        
-                        let link = topic.link.Value.ToString()
-                        MudLink'() {
-                            Href   link
-                            Target "_blank"
-                            
-                            link
-                        }
-                    }
-                
-                if topic.note.IsSome then
-                    MudPaper'() {
-                        MudText'() { Typo ConceptDetailTitleTextSize; "Note" }
-                        MudText'() { topic.note.Value }
-                    }
+                MudText'() { Typo ConceptTitleTextSize; topic.name }
+                MudFab'() { StartIcon Icons.Material.Filled.Add     ; Color Color.Primary  ; OnClick(fun _ -> showDialog()) }
+                MudFab'() {
+                    StartIcon Icons.Material.Filled.Bookmark
+                    Label     "Bookmark"
+                    Disabled  true
+                }
+                MudFab'() {
+                    StartIcon Icons.Material.Filled.Edit
+                    Color     Color.Secondary
+                    Disabled  true
+                }
             }
         )
+    
+    let renderConcept(server :Server, topic :Concept) =
+        adaptiview() {
+            let! topic, setTopic = cval(topic).WithSetter()
+            
+            renderConceptTitle(server, topic, setTopic)
+        
+            MudDivider'.create()
+            
+            if not topic.contains.IsEmpty then
+                adaptiview() {
+                    let! sub_topics_result = server.fetch(topic.contains).toUICVal()
+                    sub_topics_result |> loadingSection(renderSubTopics server)
+                }
+            
+            if topic.link.IsSome then
+                MudPaper'() {
+                    MudText'() { Typo ConceptDetailTitleTextSize; "References" }
+                    
+                    let link = topic.link.Value.ToString()
+                    MudLink'() {
+                        Href   link
+                        Target "_blank"
+                        
+                        link
+                    }
+                }
+            
+            if topic.note.IsSome then
+                MudPaper'() {
+                    MudText'() { Typo ConceptDetailTitleTextSize; "Note" }
+                    MudText'() { topic.note.Value }
+                }
+        }
 
 type Pages with
     static member Main(server :Server) =
@@ -108,10 +119,9 @@ type Pages with
             
             result |> loadingSection (fun concept ->
                 match concept with
-                | ValueSome c -> MainPage.renderConcept server c
+                | ValueSome c -> MainPage.renderConcept(server, c)
                 | ValueNone -> MudAlert'() {
                                    Severity Severity.Error
-                                   
                                    $"Cannot load topic: {topic}. Please try again."
                                }
             )

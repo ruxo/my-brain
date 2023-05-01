@@ -22,7 +22,7 @@ let uiAsync x = async {
     | e -> return (LoadError e)
 }
 
-let ConceptTitleTextSize       = Typo.h3
+let ConceptTitleTextSize       = Typo.h2
 let ConceptDetailTitleTextSize = Typo.h4
 
 [<RequireQualifiedAccess>]
