@@ -3,12 +3,48 @@
 open System
 open System.Runtime.CompilerServices
 open RZ.FSharp.Extension
+open Tirax.KMS.Domain
 open VDS.RDF
 open VDS.RDF.Query
 open VDS.RDF.Storage
-open Domain
 
-type Subject =
+[<Literal>]
+let ConceptNamespace = "http://ruxoz.net/rdfs/schema/knowledge/"
+
+[<Literal>]
+let ConceptDataNamespace = "http://ruxoz.net/rdfs/model/knowledge/"
+
+[<Literal>]
+let TagNamespace = "http://ruxoz.net/rdfs/model/tag/"
+
+[<Literal>]
+let XmlSchemaNamespace = "http://www.w3.org/2001/XMLSchema#"
+
+[<Literal>]
+let RdfNamespace = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+
+[<Literal>]
+let RdfsNamespace = "http://www.w3.org/2000/01/rdf-schema#"
+
+let private StardogDefaultNamespace = UriFactory.Create("tag:stardog:api:context:default")
+
+let private configureNamespaces(namespaces :INamespaceMapper) =
+    namespaces.AddNamespace(""    , UriFactory.Create(ConceptNamespace    ))
+    namespaces.AddNamespace("m"   , UriFactory.Create(ConceptDataNamespace))
+    namespaces.AddNamespace("tag" , UriFactory.Create(TagNamespace        ))
+    namespaces.AddNamespace("xsd" , UriFactory.Create(XmlSchemaNamespace  ))
+    namespaces.AddNamespace("rdf" , UriFactory.Create(RdfNamespace        ))
+    namespaces.AddNamespace("rdfs", UriFactory.Create(RdfsNamespace       ))
+    
+type Graph with
+    static member inline namespaceMap (g :Graph) = g.NamespaceMap
+    
+let createGraph() =
+    Graph(StardogDefaultNamespace)
+    |> sideEffect (Graph.namespaceMap >> configureNamespaces)
+
+[<Struct; IsReadOnly; NoComparison; NoEquality>]
+type KmsSubject =
     { subject :IUriNode
       g       :Graph }
       
@@ -43,8 +79,6 @@ type Subject =
         in  Triple(my.subject, p, t)
         
 and Graph with
-    static member inline namespaceMap (g :Graph) = g.NamespaceMap
-    
     member inline g.createUri      (name :string) = g.CreateUriNode(name)
     
     member g.createModelUri (name :string) = g.createUri $"m:{name}"
@@ -72,43 +106,46 @@ and Graph with
             subject.hasName(tag.name)
         }
 
-[<Literal>]
-let ConceptNamespace = "http://ruxoz.net/rdfs/schema/knowledge/"
-
-[<Literal>]
-let ConceptDataNamespace = "http://ruxoz.net/rdfs/model/knowledge/"
-
-[<Literal>]
-let TagNamespace = "http://ruxoz.net/rdfs/model/tag/"
-
-[<Literal>]
-let XmlSchemaNamespace = "http://www.w3.org/2001/XMLSchema#"
-
-[<Literal>]
-let RdfNamespace = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-
-[<Literal>]
-let RdfsNamespace = "http://www.w3.org/2000/01/rdf-schema#"
-
-let StardogDefaultNamespace = UriFactory.Create("tag:stardog:api:context:default")
-
-let private configureNamespaces(namespaces :INamespaceMapper) =
-    namespaces.AddNamespace(""    , UriFactory.Create(ConceptNamespace    ))
-    namespaces.AddNamespace("m"   , UriFactory.Create(ConceptDataNamespace))
-    namespaces.AddNamespace("tag" , UriFactory.Create(TagNamespace        ))
-    namespaces.AddNamespace("xsd" , UriFactory.Create(XmlSchemaNamespace  ))
-    namespaces.AddNamespace("rdf" , UriFactory.Create(RdfNamespace        ))
-    namespaces.AddNamespace("rdfs", UriFactory.Create(RdfsNamespace       ))
+module ToTriples =
+    type ToTriples<'T> =
+        abstract member toTriples: Graph -> 'T -> Triple seq
+        
+    [<Struct; IsReadOnly; NoComparison; NoEquality>]
+    type ConceptToTriples =
+        interface ToTriples<Concept> with
+            member _.toTriples g concept =
+                seq {
+                    let subject = g.createSubject(concept.id)
+                    subject.isContext
+                    subject.hasName(concept.name)
+                    yield! seq { for cid in concept.contains -> subject.contains(cid) }
+                    if concept.note.IsSome then subject.hasNote(concept.note.Value)
+                    if concept.link.IsSome then subject.hasLink(concept.link.Value)
+                    yield! seq { for tag in concept.tags -> subject.hasTag(tag) }
+                }
+                
+    [<Struct; IsReadOnly; NoComparison; NoEquality>]
+    type TagToTriples =
+        interface ToTriples<ConceptTag> with
+            member _.toTriples g tag =
+                seq {
+                    let subject = g.createSubject(tag.id)
+                    subject.isContext
+                    subject.hasName(tag.name)
+                }
+                
+    [<Struct; IsReadOnly; NoComparison; NoEquality>]
+    type ToTriples =
+        static member inline ($) (_: ToTriples, _: Concept)    = Unchecked.defaultof<ConceptToTriples>
+        static member inline ($) (_: ToTriples, _: ConceptTag) = Unchecked.defaultof<TagToTriples>
+        
+    let inline with' (x :'T) :^m when ^m :> ToTriples<'T> = Unchecked.defaultof<ToTriples> $ x
     
-let private createGraph() =
-    Graph(StardogDefaultNamespace)
-    |> sideEffect (Graph.namespaceMap >> configureNamespaces)
-
-[<Struct; IsReadOnly>]
+[<Struct; IsReadOnly; NoComparison; NoEquality>]
 type StardogConnection =
-    { Host :string
+    { Host     :string
       Database :string
-      User :string
+      User     :string
       Password :string }
 
     static member from(s :string) =
@@ -116,9 +153,9 @@ type StardogConnection =
             let p = kv.Split('=') in struct (p[0], p[1])
 
         let parts = s.Split(';').map(toKeyValue).toMap ()
-        in { Host = parts["Server"]
+        in { Host     = parts["Server"]
              Database = parts["Database"]
-             User = parts["User"]
+             User     = parts["User"]
              Password = parts["Password"] }
 
 // TODO: properly encode concept ID
@@ -128,7 +165,16 @@ type private GraphUpdate = { adding :Triple seq; removing :Triple seq }
     
 module private GraphUpdate =
     let empty = { adding = Seq.empty; removing = Seq.empty }
-
+        
+    let inline apply(graph :Graph, updates :inref<GraphUpdate>, tripleable_change :inref<ModelOperationType<'T>>) =
+        let inline toTriples c = (ToTriples.with' c).toTriples graph c
+            
+        match tripleable_change with
+        | Add    tripleable -> { updates with adding   = updates.adding  .append(tripleable |> toTriples) }
+        | Delete tripleable -> { updates with removing = updates.removing.append(tripleable |> toTriples) }
+        | Update (old,new') -> { updates with removing = updates.removing.append(old        |> toTriples)
+                                              adding   = updates.adding  .append(new'       |> toTriples) }
+    
 type Stardog(connection) =
     let connector = StardogConnector(connection.Host, connection.Database, connection.User, connection.Password)
     
@@ -186,19 +232,11 @@ SELECT ?subject ?property ?value
             return result
         }
         
-    member private my.apply(graph :Graph, updates :inref<_>, concept_change :inref<_>) =
-        match concept_change with
-        | Add    concept    -> { updates with adding   = updates.adding  .append(concept |> graph.toTriples) }
-        | Delete concept    -> { updates with removing = updates.removing.append(concept |> graph.toTriples) }
-        | Update (old,new') -> { updates with removing = updates.removing.append(old     |> graph.toTriples)
-                                              adding   = updates.adding  .append(new'    |> graph.toTriples) }
+    member private my.apply(graph :Graph, updates :inref<_>, concept_change :inref<ModelOperationType<Concept>>) =
+        GraphUpdate.apply(graph, &updates, &concept_change)
         
-    member private my.apply(graph :Graph, updates :inref<_>, concept_change :inref<ModelOperationType<ConceptTag>>) =
-        match concept_change with
-        | Add    concept    -> { updates with adding   = updates.adding  .append(concept |> graph.toTriples) }
-        | Delete concept    -> { updates with removing = updates.removing.append(concept |> graph.toTriples) }
-        | Update (old,new') -> { updates with removing = updates.removing.append(old     |> graph.toTriples)
-                                              adding   = updates.adding  .append(new'    |> graph.toTriples) }
+    member private my.apply(graph :Graph, updates :inref<_>, tag_change :inref<ModelOperationType<ConceptTag>>) =
+        GraphUpdate.apply(graph, &updates, &tag_change)
         
     member private my.apply(graph, updates :inref<GraphUpdate>, change_log) =
         match change_log with
