@@ -117,11 +117,15 @@ module private MainPage =
                     }
                 }
             
-            if topic.note.IsSome then
-                MudPaper'() {
-                    MudText'() { Typo ConceptDetailTitleTextSize; "Note" }
-                    MudText'() { topic.note.Value }
-                }
+            MudPaper'() {
+                Classes   ["pa-3"; "ma-2"]
+                Height    ("50em")
+                Width     ("50em")
+                Elevation (2)
+                Outlined  (true)
+                MudText'() { Typo ConceptDetailTitleTextSize; "Note" }
+                MudText'() { topic.note.defaultValue(System.String.Empty) }
+            }
         }
 
 type Pages with
