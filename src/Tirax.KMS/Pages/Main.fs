@@ -14,7 +14,9 @@ type Pages = struct end
 
 module private MainPage =
     [<Literal>]
-    let MaxTreeDepthRendering = 3
+    let MaxTreeDepthRendering = 2
+    
+    let private emptyItems = HashSet<struct (int*Concept)>()
     
     let inline renderSubTopics (server :Server) (sub_topics :Concept seq) =
         let createModel(level, topics) = HashSet(seq { for t in topics -> struct (level, t) })
@@ -24,7 +26,7 @@ module private MainPage =
             Hover  true
             Items  sub_topics
             
-            SelectedValueChanged(fun concept -> setMainTopic(concept.snd().id))
+            SelectedValueChanged(fun struct (_,concept) -> setMainTopic(concept.id))
             
             ItemTemplate(
                 fun (struct (level, concept) as p) ->
@@ -42,6 +44,7 @@ module private MainPage =
                         }
                     else
                         MudTreeViewItem'() {
+                            Items emptyItems
                             Text  concept.name
                             value p
                         }
