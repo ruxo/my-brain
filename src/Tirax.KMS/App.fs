@@ -5,6 +5,7 @@
 [<AutoOpen>]
 module Tirax.KMS.App
 
+open System.Linq
 open Microsoft.AspNetCore.Components.Routing
 open FSharp.Data.Adaptive
 open RZ.FSharp.Extension
@@ -14,6 +15,7 @@ open MudBlazor
 open Tirax.KMS.Pages
 open Server
 open AppModel
+open Domain
     
 type MudNavLink with
     static member inline of'(path, title :string, ?match' :NavLinkMatch) =
@@ -37,43 +39,45 @@ let inline private topBar (server :Server) =
     MudAppBar'() {
         Elevation 1
         
-        MudStack'() {
-            Row        true
-            AlignItems AlignItems.End
-            Spacing    2
+        adaptiview() {
+            let! drawer_open, setOpen = drawer_open.WithSetter()
             
-            div {
-                adaptiview() {
-                    let! drawer_open, setOpen = drawer_open.WithSetter()
-                    
-                    MudIconButton'() {
-                        Icon    Icons.Material.Filled.Menu
-                        Color   Color.Inherit
-                        Edge    Edge.Start
-                        OnClick(fun _ -> setOpen(not drawer_open))
-                    }
-                }
-                
-                MudLink'() {
-                    Typo      Typo.h5
-                    Color     Color.Surface
-                    Underline Underline.None
-                    Classes   ["mx-3"]
-                    
-                    OnClick(fun _ -> setMainTopic(RootTopic))
-                    
-                    "Tirax KMS"
-                }
-            }
-            div {
-                
-                adaptiview() {
-                    let! history = history
-                    let! history = server.fetch(history.rev()).toUICVal()
-                    history |> loadingSection(fun list -> list.map(showLink).join(html.raw " ⪧ ") |> html.mergeNodes)
-                }
+            MudIconButton'() {
+                Icon    Icons.Material.Filled.Menu
+                Color   Color.Inherit
+                Edge    Edge.Start
+                OnClick(fun _ -> setOpen(not drawer_open))
             }
         }
+        
+        MudLink'() {
+            Typo      Typo.h5
+            Color     Color.Surface
+            Underline Underline.None
+            Classes   ["mx-3"]
+            
+            OnClick(fun _ -> setMainTopic(RootTopic))
+            
+            "Tirax KMS"
+        }
+    }
+    
+[<Sealed>]
+type private ConceptBreadcrumbItem(concept :Domain.Concept) =
+    inherit BreadcrumbItem(concept.name, "#")
+    
+    member _.Concept = concept
+
+let private breadcrumbs(server :Server) =
+    adaptiview() {
+        let! history = history
+        let! history = server.fetch(history.rev()).toUICVal()
+        history |> loadingSection(fun list -> let items = seq { for h in list -> ConceptBreadcrumbItem(h) :> BreadcrumbItem }
+                                              MudBreadcrumbs'() {
+                                                  Separator("⪧")
+                                                  Items(items.ToList())
+                                                  ItemTemplate(fun item -> let concept :ConceptBreadcrumbItem = downcast item in showLink concept.Concept)
+                                              })
     }
     
 let private drawer =
@@ -95,10 +99,11 @@ let app = html.inject(fun (server :Server) ->
         MudSnackbarProvider'.create()
                     
         MudLayout'() {
-            topBar server
+            topBar(server)
             drawer
             
             MudMainContent'() {
+                breadcrumbs(server)
                 div {
                     classes  ["ma-3"; "pa-3"]
                     
