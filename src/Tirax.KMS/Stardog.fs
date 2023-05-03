@@ -161,6 +161,7 @@ type StardogConnection =
 // TODO: properly encode concept ID
 let sanitize_id (concept_id :ConceptId) = concept_id
 
+[<IsReadOnly; Struct; NoComparison; NoEquality>]
 type private GraphUpdate = { adding :Triple seq; removing :Triple seq }
     
 module private GraphUpdate =
@@ -232,22 +233,16 @@ SELECT ?subject ?property ?value
             return result
         }
         
-    member private my.apply(graph :Graph, updates :inref<_>, concept_change :inref<ModelOperationType<Concept>>) =
-        GraphUpdate.apply(graph, &updates, &concept_change)
-        
-    member private my.apply(graph :Graph, updates :inref<_>, tag_change :inref<ModelOperationType<ConceptTag>>) =
-        GraphUpdate.apply(graph, &updates, &tag_change)
-        
-    member private my.apply(graph, updates :inref<GraphUpdate>, change_log) =
+    member private my.apply(graph, updates :inref<GraphUpdate>, change_log :inref<ModelChange>) =
         match change_log with
-        | ConceptChange concept_change -> my.apply(graph, &updates, &concept_change)
-        | Tag tag_change         -> my.apply(graph, &updates, &tag_change)
+        | ConceptChange concept_change -> GraphUpdate.apply(graph, &updates, &concept_change)
+        | Tag tag_change               -> GraphUpdate.apply(graph, &updates, &tag_change)
         
     member my.apply(change_logs :ModelChange seq) =
         let graph = createGraph()
         let updates = GraphUpdate.empty
         async {
-            let updates = change_logs |> Seq.fold (fun last change -> my.apply(graph, &last, change)) updates
+            let updates = change_logs |> Seq.fold (fun last change -> my.apply(graph, &last, &change)) updates
             let! token = Async.CancellationToken
             do! connector.UpdateGraphAsync(graph.Name.ToString(), updates.adding, updates.removing, token) |> Async.AwaitTask
         }

@@ -50,26 +50,32 @@ module private MainPage =
 
     let inline private renderConceptTitle(server :Server, topic :Concept, setTopic :Concept -> unit) =
         let saving_status = cval(false)
+        let saving_error = cval(ValueNone)
         html.inject(fun (dialog_service :IDialogService) ->
             adaptiview() {
                 let! saving, setSaving = saving_status.WithSetter()
+                let! saving_error, setError = saving_error.WithSetter()
                 let showDialog() =
                     task {
                         match! AddConceptDialog.Show(dialog_service) with
                         | ValueSome concept -> setSaving(true)
+                                               setError(ValueNone)
                                                try
-                                                   let! updated_topic = server.addConcept(concept, topic)
-                                                   in setTopic(updated_topic)
+                                                   try
+                                                       let! updated_topic = server.addConcept(concept, topic)
+                                                       in setTopic(updated_topic)
+                                                   with
+                                                   | e -> setError(ValueSome e.Message)
                                                finally
                                                    setSaving(false)
                         | ValueNone         -> ()
                     }
                     
+                MudText'() { Typo ConceptTitleTextSize; topic.name }
                 MudStack'() {
                     Row     true
                     Spacing 2
                     
-                    MudText'() { Typo ConceptTitleTextSize; topic.name }
                     MudFab'() {
                         StartIcon(if saving then Icons.Material.Filled.Savings else Icons.Material.Filled.Add)
                         Color    (if saving then Color.Dark else Color.Primary)
@@ -87,6 +93,8 @@ module private MainPage =
                         Disabled (true)
                     }
                 }
+                if saving_error.IsSome then
+                    MudAlert'() { Severity Severity.Error; saving_error.Value }
             }
         )
     
@@ -99,6 +107,7 @@ module private MainPage =
             MudDivider'.create()
             
             if not topic.contains.IsEmpty then
+                MudText'() { Typo ConceptDetailTitleTextSize; "Contains" }
                 adaptiview() {
                     let! sub_topics_result = server.fetch(topic.contains).toUICVal()
                     sub_topics_result |> loadingSection(renderSubTopics server)

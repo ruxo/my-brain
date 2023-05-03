@@ -5,6 +5,7 @@ open System.Runtime.CompilerServices
 open System.Threading.Tasks
 open RZ.FSharp.Extension
 open RZ.FSharp.Extension.ValueOption
+open RZ.FSharp.Extension.ValueResult
 open VDS.RDF
 open VDS.RDF.Query
 open Tirax.KMS
@@ -178,7 +179,7 @@ SELECT *
                                   name = props.tryPick(ConceptProperties.asLabel).defaultValue(id) })
         }
 
-[<Struct; IsReadOnly>]
+[<Struct; IsReadOnly;NoComparison;NoEquality>]
 type ServerState = {
     version :uint64
     
@@ -195,7 +196,7 @@ module ChangeLogs =
                                         ) state
         { new' with version = new'.version + 1UL }
     
-type TransactionResult<'T> = ServerState -> Async<struct (ChangeLogs * 'T)>
+type TransactionResult<'T> = ServerState -> Async<struct (ChangeLogs * ValueResult<'T,exn>)>
 
 module Operations =
     let private from (tag_map :Map<ConceptId,ConceptTag>) struct (id, props :ConceptProperties seq) =
@@ -226,28 +227,35 @@ module Operations =
     let fetch (db :Stardog) id state = async {
         let! graph_result = db.FetchConcept3 id
         let struct (changes, map) = updateState state graph_result
-        return struct (changes, map.tryGet(id))
+        return struct (changes, ValueOk <| map.tryGet(id))
     }
         
     let fetchMany (db :Stardog) ids state = async {
         let ids = ids |> Seq.toArray
         if ids.Length = 0 then
-            return struct (Seq.empty, Seq.empty)
+            return struct (Seq.empty, ValueOk Seq.empty)
         else
             let! graph_result = db.FetchConcepts ids
             let struct (changes, map) = updateState state graph_result
-            return struct (changes, ids.choose(map.tryGet))
+            return struct (changes, ids.choose(map.tryGet) |> ValueOk)
     }
     
-    let addConcept(db :Stardog, concept, target) _ =
+    let addConcept(db :Stardog, concept, target) state =
         async {
-            let updated = { target with contains = target.contains.Add(concept.id) }
-            let changes = seq {
-                              ConceptChange(Add concept)
-                              ConceptChange(Update(target, updated))
-                          }
-            do! db.apply(changes)
-            return struct (changes, updated)
+            if state.concepts.ContainsKey(concept.id) then raise(Duplication concept.id)
+            let! struct (changes, existing_concept) = state |> fetch db concept.id
+            
+            match existing_concept with
+            | ValueError error     -> return struct (changes, ValueError error)
+            | ValueOk(ValueSome _) -> return struct (changes, ValueError(Duplication concept.id))
+            | ValueOk ValueNone    -> 
+                let updated = { target with contains = target.contains.Add(concept.id) }
+                let changes = seq {
+                                  ConceptChange(Add concept)
+                                  ConceptChange(Update(target, updated))
+                              }
+                do! db.apply(changes)
+                return struct (changes, ValueOk updated)
         }
 
 type Server(db :Stardog) =
@@ -264,7 +272,7 @@ type Server(db :Stardog) =
             let! updater = inbox.Receive()
             
             let! state = Async.AwaitTask snapshot
-            let! changes = updater state
+            let! changes = updater(state)
             snapshot <- Task.FromResult(ChangeLogs.apply state changes)
             
             return! loop()
@@ -277,8 +285,10 @@ type Server(db :Stardog) =
         
         let updater state = async {
             try
-                let! changes, result = operation state
-                response.SetResult(result)
+                let! changes, result = operation(state)
+                match result with
+                | ValueOk    v -> response.SetResult(v)
+                | ValueError e -> response.SetException(e)
                 return changes
             with
             | e -> response.SetException(e)
@@ -301,7 +311,7 @@ type Server(db :Stardog) =
         let existed, need_fetches = ids |> Seq.map (fun i -> i, state.concepts.tryGet(i))
                                         |> Seq.toList
                                         |> List.partition (snd >> ValueOption.isSome)
-        let existed = existed.map(snd >> unwrap)
+        let existed = existed.map(snd >> ValueOption.unwrap)
         let need_fetches = need_fetches.map(fst)
         let! fetched_concepts = my.transact(Operations.fetchMany db need_fetches)
         return existed.append(fetched_concepts)

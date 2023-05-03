@@ -3,6 +3,10 @@
 open System
 open System.Runtime.CompilerServices
 
+exception RaceCondition
+exception Duplication of key:string
+exception DatabaseTransactionError of code:string * original:exn
+
 type ConceptId = string
 
 type ConceptTag =
