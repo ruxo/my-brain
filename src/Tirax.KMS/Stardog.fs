@@ -9,6 +9,8 @@ open VDS.RDF
 open VDS.RDF.Query
 open VDS.RDF.Query.Builder
 open VDS.RDF.Query.Builder.Expressions
+open VDS.RDF.Query.Expressions
+open VDS.RDF.Query.Expressions.Comparison
 open VDS.RDF.Storage
 
 [<Literal>]
@@ -40,7 +42,7 @@ module ModuleNamespaces =
         then ValueSome(struct (namespace', s.Substring(namespace'.Length)))
         else ValueNone
         
-    let getModelId(s) =
+    let getModelId s =
         match tryNamespace ConceptDataNamespace s with
         | ValueSome v -> v.snd()
         | ValueNone   -> failwithf $"Invalid model URI: {s}"
@@ -271,13 +273,18 @@ SELECT ?subject ?property ?value
         
     member my.SearchExact(keyword :string, cancel_token :CancellationToken) =
         let subject = SparqlVariable("subject")
-        let label   = SparqlVariable("label")
-        let q       = QueryBuilder.Select(subject)
-                                  .Where( fun cond -> cond.Subject(subject).PredicateUri(Keywords.RdfsLabel).Object(label)
-                                                          .Subject(subject).PredicateUri(Keywords.a).Object(Keywords.Context)
-                                                      |> ignore)
-                                  .Filter(fun cond -> VariableExpression.op_Equality(keyword, cond.Variable(label.Name)))
-                                  .Limit(50)
+        let label = SparqlVariable("label")
+        let q = QueryBuilder.Select(subject)
+                            .Where( fun cond -> cond.Subject(subject).PredicateUri(Keywords.RdfsLabel).Object(label)
+                                                    .Subject(subject).PredicateUri(Keywords.a).Object(Keywords.Context)
+                                                |> ignore)
+                            .Filter(fun cond -> let label = cond.Variable(label.Name)
+                                                let lcase_params = System.Collections.Generic.List<ISparqlExpression>()
+                                                lcase_params.Add(label.Expression)
+                                                let lcase = SparqlExpressionFactory.CreateExpression(UriFactory.Create(SparqlBuiltInFunctionFactory.SparqlFunctionsNamespace + SparqlSpecsHelper.SparqlKeywordLCase.ToLower()),
+                                                                lcase_params, allowUnknownFunctions=true)
+                                                BooleanExpression(EqualsExpression(lcase, cond.Constant(keyword).Expression)))
+                            .Limit(50)
         q.Prefixes <- namespace_mapper
         let q = q.BuildQuery().ToString()
         

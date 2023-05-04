@@ -323,6 +323,5 @@ type Server(db :Stardog) =
     member my.search(keyword :string, cancel_token) =
         async {
             let! concept_ids = db.SearchExact(keyword, cancel_token)
-            let! concepts = my.fetch(concept_ids)
-            return seq { for c in concepts -> c.name }
+            return! my.fetch(concept_ids)
         }

@@ -14,14 +14,15 @@ type ConceptTag =
       name :string }
     
 [<Struct; IsReadOnly>]
-type Concept = {
-    id       :ConceptId
-    name     :string
-    contains :Set<ConceptId>
-    note     :string voption
-    link     :Uri voption
-    tags     :Set<ConceptId>
-}
+type Concept =
+    { id :ConceptId
+      name :string
+      contains :Set<ConceptId>
+      note :string voption
+      link :Uri voption
+      tags :Set<ConceptId> }
+    
+    override my.ToString() = my.name
 
 module Concept =
     let empty = { id = String.Empty; name = String.Empty; contains = Set.empty; note = ValueNone; link = ValueNone; tags = Set.empty }

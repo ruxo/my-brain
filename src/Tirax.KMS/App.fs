@@ -61,18 +61,20 @@ let inline private topBar (server :Server) =
             
             "Tirax KMS"
         }
-        MudAutocomplete'<string>() {
-            Label               "Search"
-            Variant             Variant.Outlined
-            Adornment           Adornment.Start
-            AdornmentIcon       Icons.Material.Filled.Search
-            AdornmentColor      Color.Secondary
-            Margin              Margin.Dense
-            DebounceInterval    200
+        MudAutocomplete'<Concept>() {
+            Label("Search")
+            SelectOnClick(true)
+            Variant(Variant.Outlined)
+            Adornment(Adornment.Start)
+            AdornmentIcon(Icons.Material.Filled.Search)
+            AdornmentColor(Color.Secondary)
+            Margin(Margin.Dense)
+            DebounceInterval(200)
             SearchFuncWithCancel(fun s ct -> let result = if String.IsNullOrWhiteSpace(s)
                                                           then async.Return(Seq.empty)
                                                           else server.search(s.Trim(),ct)
                                              result |> Async.StartAsTask)
+            ValueChanged(fun concept -> setMainTopic(concept.id))
         }
     }
     
