@@ -11,6 +11,7 @@ open VDS.RDF.Query.Builder
 open VDS.RDF.Query.Builder.Expressions
 open VDS.RDF.Query.Expressions
 open VDS.RDF.Query.Expressions.Comparison
+open VDS.RDF.Query.Expressions.Primary
 open VDS.RDF.Storage
 
 [<Literal>]
@@ -271,23 +272,7 @@ SELECT ?subject ?property ?value
             do! connector.UpdateGraphAsync(graph.Name.ToString(), updates.adding, updates.removing, token) |> Async.AwaitTask
         }
         
-    member my.SearchExact(keyword :string, cancel_token :CancellationToken) =
-        let subject = SparqlVariable("subject")
-        let label = SparqlVariable("label")
-        let q = QueryBuilder.Select(subject)
-                            .Where( fun cond -> cond.Subject(subject).PredicateUri(Keywords.RdfsLabel).Object(label)
-                                                    .Subject(subject).PredicateUri(Keywords.a).Object(Keywords.Context)
-                                                |> ignore)
-                            .Filter(fun cond -> let label = cond.Variable(label.Name)
-                                                let lcase_params = System.Collections.Generic.List<ISparqlExpression>()
-                                                lcase_params.Add(label.Expression)
-                                                let lcase = SparqlExpressionFactory.CreateExpression(UriFactory.Create(SparqlBuiltInFunctionFactory.SparqlFunctionsNamespace + SparqlSpecsHelper.SparqlKeywordLCase.ToLower()),
-                                                                lcase_params, allowUnknownFunctions=true)
-                                                BooleanExpression(EqualsExpression(lcase, cond.Constant(keyword).Expression)))
-                            .Limit(50)
-        q.Prefixes <- namespace_mapper
-        let q = q.BuildQuery().ToString()
-        
+    member private my.Search(q :string, cancel_token :CancellationToken) =
         async {
             let! result = connector.QueryAsync(q, cancel_token) |> Async.AwaitTask
             let result = unbox<SparqlResultSet>(result)
@@ -295,7 +280,32 @@ SELECT ?subject ?property ?value
             return seq {
                 for r in result.Results do
                 cancel_token.ThrowIfCancellationRequested()
-                let node :IUriNode = downcast r[subject.Name]
+                let node :IUriNode = downcast r["subject"]
                 ModuleNamespaces.getModelId(node.Uri.ToString())
             }
         }
+        
+    member my.SearchExact(keyword :string, cancel_token :CancellationToken) =
+        let safe_keyword_quoted = ConstantTerm(LiteralNode(keyword)).ToString()
+        let q = safe_keyword_quoted |> sprintf """
+SELECT ?subject WHERE
+{
+  ?subject rdfs:label ?label .
+  ?subject rdf:type|rdfs:type :Context .
+  FILTER(LCASE(?label) = %s)
+}
+LIMIT 50
+"""
+        my.Search(q, cancel_token)
+        
+    member my.PartialSearch(keyword :string, cancel_token :CancellationToken) =
+        let safe_keyword_quoted = ConstantTerm(LiteralNode(keyword + "*")).ToString()
+        let q = safe_keyword_quoted |> sprintf """
+SELECT ?subject WHERE
+{
+  ?subject rdfs:label ?label .
+  ?subject rdf:type|rdfs:type :Context .
+  ?label <tag:stardog:api:property:textMatch> (%s 50).
+}
+"""
+        my.Search(q, cancel_token)

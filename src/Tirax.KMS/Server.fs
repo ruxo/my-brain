@@ -2,6 +2,7 @@
 
 open System
 open System.Runtime.CompilerServices
+open System.Text.RegularExpressions
 open System.Threading.Tasks
 open RZ.FSharp.Extension
 open RZ.FSharp.Extension.ValueOption
@@ -259,6 +260,8 @@ module Operations =
         }
 
 type Server(db :Stardog) =
+    static let invalid_keyword_letters = Regex(@"[+\-&|!\^\\:~(){}\[\]/*?“]", RegexOptions.Compiled)
+    
     let mutable snapshot =
         task {
             let! tags = db.GetTags()
@@ -322,6 +325,8 @@ type Server(db :Stardog) =
         
     member my.search(keyword :string, cancel_token) =
         async {
-            let! concept_ids = db.SearchExact(keyword, cancel_token)
+            let sanitized = invalid_keyword_letters.Replace(keyword, String.Empty)
+            let search = if sanitized.Length < 3 then db.SearchExact else db.PartialSearch
+            let! concept_ids = search(sanitized, cancel_token)
             return! my.fetch(concept_ids)
         }
