@@ -3,14 +3,11 @@
 open System
 open System.Runtime.CompilerServices
 open System.Threading
+open Microsoft.Extensions.Logging
 open RZ.FSharp.Extension
 open Tirax.KMS.Domain
 open VDS.RDF
 open VDS.RDF.Query
-open VDS.RDF.Query.Builder
-open VDS.RDF.Query.Builder.Expressions
-open VDS.RDF.Query.Expressions
-open VDS.RDF.Query.Expressions.Comparison
 open VDS.RDF.Query.Expressions.Primary
 open VDS.RDF.Storage
 
@@ -201,7 +198,7 @@ module private GraphUpdate =
         | Update (old,new') -> { updates with removing = updates.removing.append(old        |> toTriples)
                                               adding   = updates.adding  .append(new'       |> toTriples) }
     
-type Stardog(connection) =
+type Stardog(logger :ILogger<Stardog>, connection) =
     let connector = StardogConnector(connection.Host, connection.Database, connection.User, connection.Password)
     
     member private my.RawQuery<'T>(s) :Async<'T> =
@@ -226,7 +223,7 @@ SELECT *
     """
         in async {
             let! result = my.Query q
-            printfn $"Loading {nameof my.FetchConcepts}:{result.Count} results."
+            logger.LogDebug("Loading FetchConcepts:{Count} results", result.Count)
             return result
         }
 
@@ -254,7 +251,7 @@ SELECT ?subject ?property ?value
     """
         in async {
             let! result = my.Query q
-            printfn $"Loading {result.Count} results."
+            logger.LogDebug("Loading FetchConcepts3:{Count} results", result.Count)
             return result
         }
         
@@ -272,11 +269,12 @@ SELECT ?subject ?property ?value
             do! connector.UpdateGraphAsync(graph.Name.ToString(), updates.adding, updates.removing, token) |> Async.AwaitTask
         }
         
-    member private my.Search(q :string, cancel_token :CancellationToken) =
+    member private my.Search(keyword :string, q :string, cancel_token :CancellationToken) =
         async {
             let! result = connector.QueryAsync(q, cancel_token) |> Async.AwaitTask
             let result = unbox<SparqlResultSet>(result)
             assert(result.ResultsType = SparqlResultsType.VariableBindings)
+            logger.LogDebug("Search {Keyword} found {Count} results.", keyword, result.Count)
             return seq {
                 for r in result.Results do
                 cancel_token.ThrowIfCancellationRequested()
@@ -296,7 +294,7 @@ SELECT ?subject WHERE
 }
 LIMIT 50
 """
-        my.Search(q, cancel_token)
+        my.Search(keyword, q, cancel_token)
         
     member my.PartialSearch(keyword :string, cancel_token :CancellationToken) =
         let safe_keyword_quoted = ConstantTerm(LiteralNode(keyword + "*")).ToString()
@@ -308,4 +306,4 @@ SELECT ?subject WHERE
   ?label <tag:stardog:api:property:textMatch> (%s 50).
 }
 """
-        my.Search(q, cancel_token)
+        my.Search(keyword, q, cancel_token)
