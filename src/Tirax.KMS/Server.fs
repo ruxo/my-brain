@@ -319,3 +319,10 @@ type Server(db :Stardog) =
     
     member my.addConcept(new_concept, topic) =
         my.transact(Operations.addConcept(db, new_concept, topic))
+        
+    member my.search(keyword :string, cancel_token) =
+        async {
+            let! concept_ids = db.SearchExact(keyword, cancel_token)
+            let! concepts = my.fetch(concept_ids)
+            return seq { for c in concepts -> c.name }
+        }

@@ -2,10 +2,13 @@
 
 open System
 open System.Runtime.CompilerServices
+open System.Threading
 open RZ.FSharp.Extension
 open Tirax.KMS.Domain
 open VDS.RDF
 open VDS.RDF.Query
+open VDS.RDF.Query.Builder
+open VDS.RDF.Query.Builder.Expressions
 open VDS.RDF.Storage
 
 [<Literal>]
@@ -26,15 +29,34 @@ let RdfNamespace = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 [<Literal>]
 let RdfsNamespace = "http://www.w3.org/2000/01/rdf-schema#"
 
+module Keywords =
+    let RdfsLabel = Uri(RdfsNamespace + "label")
+    let a = Uri(RdfsNamespace + "type")
+    let Context = Uri(ConceptNamespace + "Context")
+    
+module ModuleNamespaces =
+    let private tryNamespace (namespace' :string) (s :string) =
+        if s.StartsWith(namespace')
+        then ValueSome(struct (namespace', s.Substring(namespace'.Length)))
+        else ValueNone
+        
+    let getModelId(s) =
+        match tryNamespace ConceptDataNamespace s with
+        | ValueSome v -> v.snd()
+        | ValueNone   -> failwithf $"Invalid model URI: {s}"
+
 let private StardogDefaultNamespace = UriFactory.Create("tag:stardog:api:context:default")
 
 let private configureNamespaces(namespaces :INamespaceMapper) =
     namespaces.AddNamespace(""    , UriFactory.Create(ConceptNamespace    ))
-    namespaces.AddNamespace("m"   , UriFactory.Create(ConceptDataNamespace))
     namespaces.AddNamespace("tag" , UriFactory.Create(TagNamespace        ))
     namespaces.AddNamespace("xsd" , UriFactory.Create(XmlSchemaNamespace  ))
     namespaces.AddNamespace("rdf" , UriFactory.Create(RdfNamespace        ))
     namespaces.AddNamespace("rdfs", UriFactory.Create(RdfsNamespace       ))
+    namespaces.AddNamespace("m"   , UriFactory.Create(ConceptDataNamespace))
+    
+let private namespace_mapper = NamespaceMapper(empty=true)
+configureNamespaces(namespace_mapper)
     
 type Graph with
     static member inline namespaceMap (g :Graph) = g.NamespaceMap
@@ -245,4 +267,28 @@ SELECT ?subject ?property ?value
             let updates = change_logs |> Seq.fold (fun last change -> my.apply(graph, &last, &change)) updates
             let! token = Async.CancellationToken
             do! connector.UpdateGraphAsync(graph.Name.ToString(), updates.adding, updates.removing, token) |> Async.AwaitTask
+        }
+        
+    member my.SearchExact(keyword :string, cancel_token :CancellationToken) =
+        let subject = SparqlVariable("subject")
+        let label   = SparqlVariable("label")
+        let q       = QueryBuilder.Select(subject)
+                                  .Where( fun cond -> cond.Subject(subject).PredicateUri(Keywords.RdfsLabel).Object(label)
+                                                          .Subject(subject).PredicateUri(Keywords.a).Object(Keywords.Context)
+                                                      |> ignore)
+                                  .Filter(fun cond -> VariableExpression.op_Equality(keyword, cond.Variable(label.Name)))
+                                  .Limit(50)
+        q.Prefixes <- namespace_mapper
+        let q = q.BuildQuery().ToString()
+        
+        async {
+            let! result = connector.QueryAsync(q, cancel_token) |> Async.AwaitTask
+            let result = unbox<SparqlResultSet>(result)
+            assert(result.ResultsType = SparqlResultsType.VariableBindings)
+            return seq {
+                for r in result.Results do
+                cancel_token.ThrowIfCancellationRequested()
+                let node :IUriNode = downcast r[subject.Name]
+                ModuleNamespaces.getModelId(node.Uri.ToString())
+            }
         }
