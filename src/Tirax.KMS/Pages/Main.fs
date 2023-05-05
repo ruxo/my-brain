@@ -1,5 +1,6 @@
 ﻿namespace Tirax.KMS.Pages
 
+open System.Threading.Tasks
 open FSharp.Data.Adaptive
 open System.Collections.Generic
 open Microsoft.AspNetCore.Components.Web
@@ -68,10 +69,25 @@ module private MainPage =
                 }
             }
 
-    let inline private renderConceptTitle(server :Server, topic :Concept, setTopic :Concept -> unit) =
+    let private renderConceptTitle(server :Server, topic :Concept, setTopic :Concept -> unit, refreshTopic: unit -> Task<unit>) =
         let saving_status = cval(false)
         let saving_error = cval(ValueNone)
         let topic_editing = cval(false)
+        let editing_name = cval(topic.name)
+        let topic_saving = cval(false)
+                
+        let mutable form = Unchecked.defaultof<MudForm>
+        let confirmName(key :KeyboardEventArgs) =
+            task {
+                do! form.Validate()
+                if form.IsValid && key.Code.EndsWith("Enter") && not (key.AltKey || key.CtrlKey || key.MetaKey || key.ShiftKey) then
+                    if topic.name <> editing_name.Value then
+                        topic_saving.Publish(true)
+                        do! server.UpdateConceptName(topic.id, editing_name.Value)
+                        do! refreshTopic()
+                    topic_editing.Publish(false)
+            }
+            
         html.inject(fun (dialog_service :IDialogService) ->
             adaptiview() {
                 let! saving, setSaving = saving_status.WithSetter()
@@ -96,26 +112,23 @@ module private MainPage =
                 in owners |> loadingSection(Seq.toArray >> renderOwnerBreadcrumbs)
                 
                 let! editing, setEditing = topic_editing.WithSetter()
-                
+                let! editing_name, setEditingName = editing_name.WithSetter()
+                let! topic_saving = topic_saving
+                                
                 MudStack'() {
                     Row(true)
                     
                     if editing then
-                        let mutable form = Unchecked.defaultof<MudForm>
-                        let confirmName(key :KeyboardEventArgs) =
-                            task {
-                                do! form.Validate()
-                                if form.IsValid && key.Code.EndsWith("Enter") && not (key.AltKey || key.CtrlKey || key.MetaKey || key.ShiftKey) then
-                                    setEditing(false)
-                            }
-                                
                         MudForm'(){
                             ref(fun v -> form <- v)
+                            
                             MudTextField'<string>() {
                                 Label("Rename topic")
+                                Disabled(topic_saving)
                                 Required(true)
-                                Value(topic.name)
+                                Value(editing_name)
                                 OnKeyUp(confirmName)
+                                ValueChanged(setEditingName) 
                             }
                         }
                     else
@@ -152,8 +165,13 @@ module private MainPage =
     let renderConcept(server :Server, topic :Concept) =
         adaptiview() {
             let! topic, setTopic = cval(topic).WithSetter()
+            let refreshTopic() =
+                task {
+                    let! refreshed_topic = server.fetch(topic.id)
+                    setTopic(refreshed_topic.Value)
+                }
             
-            renderConceptTitle(server, topic, setTopic)
+            renderConceptTitle(server, topic, setTopic, refreshTopic)
         
             MudDivider'.create()
             

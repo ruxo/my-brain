@@ -274,6 +274,14 @@ module Operations =
                 let owner_list_changes = OwnerChange(Add struct (concept.id, [target.id])) |> Seq.singleton
                 return struct (changes.append(owner_list_changes), ValueOk updated)
         }
+        
+    let updateConcept(db :Stardog, current_concept, new_concept) state =
+        assert(current_concept.id = new_concept.id)
+        async {
+            let changes = seq { ConceptChange(Update(current_concept, new_concept)) }
+            do! db.apply(changes)
+            return struct (changes, ValueOk ())
+        }
 
 type Server(db :Stardog) =
     static let invalid_keyword_letters = Regex(@"[+\-&|!\^\\:~(){}\[\]/*?“]", RegexOptions.Compiled)
@@ -357,4 +365,12 @@ type Server(db :Stardog) =
             let search = if sanitized.Length < 3 then db.SearchExact else db.PartialSearch
             let! concept_ids = search(sanitized, cancel_token)
             return! my.fetch(concept_ids)
+        }
+    
+    member my.UpdateConceptName(concept_id :ConceptId, new_name) =
+        async {
+            match! my.fetch(concept_id) with
+            | ValueNone -> ()
+            | ValueSome concept -> let new_topic = { concept with name = new_name }
+                                   do! my.transact(Operations.updateConcept(db, concept, new_topic))
         }
