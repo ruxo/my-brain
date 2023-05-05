@@ -2,6 +2,7 @@
 
 open FSharp.Data.Adaptive
 open System.Collections.Generic
+open Microsoft.AspNetCore.Components.Web
 open RZ.FSharp.Extension
 open MudBlazor
 open Fun.Blazor
@@ -70,6 +71,7 @@ module private MainPage =
     let inline private renderConceptTitle(server :Server, topic :Concept, setTopic :Concept -> unit) =
         let saving_status = cval(false)
         let saving_error = cval(ValueNone)
+        let topic_editing = cval(false)
         html.inject(fun (dialog_service :IDialogService) ->
             adaptiview() {
                 let! saving, setSaving = saving_status.WithSetter()
@@ -93,7 +95,34 @@ module private MainPage =
                 let! owners = server.GetOwner(topic.id).toUICVal()
                 in owners |> loadingSection(Seq.toArray >> renderOwnerBreadcrumbs)
                 
-                MudText'() { Typo ConceptTitleTextSize; topic.name }
+                let! editing, setEditing = topic_editing.WithSetter()
+                
+                MudStack'() {
+                    Row(true)
+                    
+                    if editing then
+                        let mutable form = Unchecked.defaultof<MudForm>
+                        let confirmName(key :KeyboardEventArgs) =
+                            task {
+                                do! form.Validate()
+                                if form.IsValid && key.Code.EndsWith("Enter") && not (key.AltKey || key.CtrlKey || key.MetaKey || key.ShiftKey) then
+                                    setEditing(false)
+                            }
+                                
+                        MudForm'(){
+                            ref(fun v -> form <- v)
+                            MudTextField'<string>() {
+                                Label("Rename topic")
+                                Required(true)
+                                Value(topic.name)
+                                OnKeyUp(confirmName)
+                            }
+                        }
+                    else
+                        MudText'() { Typo(ConceptTitleTextSize); topic.name }
+                        
+                    MudIconButton'() { Icon(Icons.Material.Filled.Edit); Disabled(editing); OnClick(fun _ -> setEditing(not editing)) }
+                }
                 MudStack'() {
                     Row     true
                     Spacing 2
