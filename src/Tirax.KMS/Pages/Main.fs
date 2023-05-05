@@ -50,6 +50,22 @@ module private MainPage =
                         }
                 )
         }
+        
+    let inline private renderOwnerBreadcrumbs owners =
+        if owners |> Array.isEmpty then
+            Internal.emptyNode()
+        else
+            MudStack'() {
+                Row(true); AlignItems(AlignItems.Center); Classes["mb-3"]
+                
+                MudText'() { Typo Typo.subtitle2; "Owners:" }
+                MudBreadcrumbs'() {
+                    Items(ConceptBreadcrumbItem.For(owners))
+                    Separator("|")
+                    ItemTemplate(fun item -> let concept :ConceptBreadcrumbItem = downcast item in showLink concept.Concept)
+                    Styles["padding", "0"]
+                }
+            }
 
     let inline private renderConceptTitle(server :Server, topic :Concept, setTopic :Concept -> unit) =
         let saving_status = cval(false)
@@ -74,6 +90,9 @@ module private MainPage =
                         | ValueNone         -> ()
                     }
                     
+                let! owners = server.GetOwner(topic.id).toUICVal()
+                in owners |> loadingSection(Seq.toArray >> renderOwnerBreadcrumbs)
+                
                 MudText'() { Typo ConceptTitleTextSize; topic.name }
                 MudStack'() {
                     Row     true
@@ -81,19 +100,19 @@ module private MainPage =
                     
                     MudFab'() {
                         StartIcon(if saving then Icons.Material.Filled.Savings else Icons.Material.Filled.Add)
-                        Color    (if saving then Color.Dark else Color.Primary)
-                        Disabled (saving)
-                        OnClick  (fun _ -> showDialog())
+                        Color(if saving then Color.Dark else Color.Primary)
+                        Disabled(saving)
+                        OnClick(fun _ -> showDialog())
                     }
                     MudFab'() {
                         StartIcon(Icons.Material.Filled.Bookmark)
-                        Label    ("Bookmark")
-                        Disabled (true)
+                        Label("Bookmark")
+                        Disabled(true)
                     }
                     MudFab'() {
                         StartIcon(Icons.Material.Filled.Edit)
-                        Color    (Color.Secondary)
-                        Disabled (true)
+                        Color(Color.Secondary)
+                        Disabled(true)
                     }
                 }
                 if saving_error.IsSome then

@@ -25,10 +25,18 @@ type ModelOperationTypeExtensions =
         | Add x         -> m.Add(keyIdentifier x, x)
         | Update (_, x) -> m.Change(keyIdentifier x, constant (Some x))
         | Delete x      -> m.Remove(keyIdentifier x)
+        
+    [<Extension>]
+    static member inline applyKeyValue(operation :ModelOperationType<struct ('K*'T)>, m :Map<'K,'T>) =
+        match operation with
+        | Add struct (k,v)         -> m.Add(k, v)
+        | Update (_, struct (k,v)) -> m.Change(k, constant (Some v))
+        | Delete struct (k,_)      -> m.Remove(k)
     
 [<Struct; IsReadOnly>]
 type ModelChange =
-    | Tag     of tag:ModelOperationType<ConceptTag>
+    | Tag           of tag:ModelOperationType<ConceptTag>
     | ConceptChange of concept:ModelOperationType<Concept>
+    | OwnerChange   of owner:ModelOperationType<struct (ConceptId * ConceptId list)>
     
 type ChangeLogs = ModelChange seq

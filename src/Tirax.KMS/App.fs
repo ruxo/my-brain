@@ -6,7 +6,6 @@
 module Tirax.KMS.App
 
 open System
-open System.Linq
 open Microsoft.AspNetCore.Components.Routing
 open FSharp.Data.Adaptive
 open RZ.FSharp.Extension
@@ -78,22 +77,16 @@ let inline private topBar (server :Server) =
         }
     }
     
-[<Sealed>]
-type private ConceptBreadcrumbItem(concept :Domain.Concept) =
-    inherit BreadcrumbItem(concept.name, "#")
-    
-    member _.Concept = concept
-
 let private breadcrumbs(server :Server) =
     adaptiview() {
         let! history = history
         let! history = server.fetch(history.rev()).toUICVal()
-        history |> loadingSection(fun list -> let items = seq { for h in list -> ConceptBreadcrumbItem(h) :> BreadcrumbItem }
-                                              MudBreadcrumbs'() {
-                                                  Separator("⪧")
-                                                  Items(items.ToList())
-                                                  ItemTemplate(fun item -> let concept :ConceptBreadcrumbItem = downcast item in showLink concept.Concept)
-                                              })
+        history |> loadingSection(fun concepts ->
+                                      MudBreadcrumbs'() {
+                                          Separator("⪧")
+                                          Items(ConceptBreadcrumbItem.For(concepts))
+                                          ItemTemplate(fun item -> let concept :ConceptBreadcrumbItem = downcast item in showLink concept.Concept)
+                                      })
     }
     
 let private drawer =

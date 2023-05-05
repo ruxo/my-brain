@@ -181,21 +181,24 @@ SELECT *
         }
 
 [<Struct; IsReadOnly;NoComparison;NoEquality>]
-type ServerState = {
-    version :uint64
+type ServerState =
+    { version  :uint64
+      tags     :Map<ConceptId, ConceptTag>
+      concepts :Map<ConceptId, Concept>
+      owners   :Map<ConceptId, ConceptId list> }
     
-    tags :Map<ConceptId, ConceptTag>
     
-    concepts :Map<ConceptId, Concept>
-}
 
 module ChangeLogs =
+    let applyChange state change =
+        match change with
+        | ConceptChange c   -> { state with concepts = c.apply(state.concepts, fun ct -> ct.id) }
+        | ModelChange.Tag t -> { state with tags = t.apply(state.tags, fun tag -> tag.id) }
+        | OwnerChange o     -> { state with owners = o.applyKeyValue(state.owners) }
+    
     let apply state changes =
-        let new' = changes |> Seq.fold (fun last -> function
-                                        | ConceptChange c         -> { last with concepts = c.apply(last.concepts, fun ct -> ct.id) }
-                                        | ModelChange.Tag t -> { last with tags = t.apply(last.tags, fun tag -> tag.id) }
-                                        ) state
-        { new' with version = new'.version + 1UL }
+        let new' = changes |> Seq.fold applyChange state
+        in { new' with version = new'.version + 1UL }
     
 type TransactionResult<'T> = ServerState -> Async<struct (ChangeLogs * ValueResult<'T,exn>)>
 
@@ -241,6 +244,17 @@ module Operations =
             return struct (changes, ids.choose(map.tryGet) |> ValueOk)
     }
     
+    let fetchOwner(db :Stardog, concept_id) state =
+        async {
+            let! owners  = db.FetchOwner(concept_id)
+            let  result  = owners.toList()
+            let  changes = OwnerChange(let change = struct (concept_id, result)
+                                       match state.owners.tryGet(concept_id) with
+                                       | ValueNone   -> Add change
+                                       | ValueSome v -> let old = struct (concept_id, v) in Update(old, change))
+            return struct (Seq.singleton changes, ValueOk result)
+        }
+    
     let addConcept(db :Stardog, concept, target) state =
         async {
             if state.concepts.ContainsKey(concept.id) then raise(Duplication concept.id)
@@ -249,14 +263,16 @@ module Operations =
             match existing_concept with
             | ValueError error     -> return struct (changes, ValueError error)
             | ValueOk(ValueSome _) -> return struct (changes, ValueError(Duplication concept.id))
-            | ValueOk ValueNone    -> 
+            | ValueOk ValueNone    ->
                 let updated = { target with contains = target.contains.Add(concept.id) }
                 let changes = seq {
                                   ConceptChange(Add concept)
                                   ConceptChange(Update(target, updated))
                               }
                 do! db.apply(changes)
-                return struct (changes, ValueOk updated)
+                
+                let owner_list_changes = OwnerChange(Add struct (concept.id, [target.id])) |> Seq.singleton
+                return struct (changes.append(owner_list_changes), ValueOk updated)
         }
 
 type Server(db :Stardog) =
@@ -267,7 +283,8 @@ type Server(db :Stardog) =
             let! tags = db.GetTags()
             return { version = 0UL
                      tags = tags.toMap(fun tag -> tag.id)
-                     concepts = Map.empty }
+                     concepts = Map.empty
+                     owners = Map.empty }
         }
 
     let transaction_agent = MailboxProcessor.Start(fun inbox ->
@@ -315,13 +332,24 @@ type Server(db :Stardog) =
                                         |> Seq.toList
                                         |> List.partition (snd >> ValueOption.isSome)
         let existed = existed.map(snd >> ValueOption.unwrap)
-        let need_fetches = need_fetches.map(fst)
-        let! fetched_concepts = my.transact(Operations.fetchMany db need_fetches)
-        return existed.append(fetched_concepts)
+        let need_fetches = need_fetches.map(fst).toArray()
+        if need_fetches.Length = 0
+        then return existed
+        else let! fetched_concepts = my.transact(Operations.fetchMany db need_fetches)
+             return existed.append(fetched_concepts)
     }
     
     member my.addConcept(new_concept, topic) =
         my.transact(Operations.addConcept(db, new_concept, topic))
+        
+    member my.GetOwner(concept_id) =
+        async {
+            let! state = Async.AwaitTask snapshot
+            let! owners = match state.owners.tryGet(concept_id) with
+                          | ValueSome v -> async.Return(v)
+                          | ValueNone -> my.transact(Operations.fetchOwner(db, concept_id))
+            return! my.fetch(owners)
+        }
         
     member my.search(keyword :string, cancel_token) =
         async {

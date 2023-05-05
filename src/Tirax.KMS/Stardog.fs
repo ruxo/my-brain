@@ -127,7 +127,22 @@ and Graph with
             subject.isContext
             subject.hasName(tag.name)
         }
+        
+exception InvalidNodeOperation of INode
 
+type INode with
+    member node.ExtractUri() =
+        match node with
+        | :? IUriNode as uri ->
+            let ok, name = namespace_mapper.ReduceToQName(uri.Uri.ToString())
+            if ok then
+                let parts = name.Split(':')
+                struct (parts[0], parts[1])
+            else
+                raise(RdfException $"Model {uri.Uri} is not recognized")
+        | _ -> raise(InvalidNodeOperation node)
+
+// ========================================== GRAPH UPDATE ============================================
 module ToTriples =
     type ToTriples<'T> =
         abstract member toTriples: Graph -> 'T -> Triple seq
@@ -180,8 +195,7 @@ type StardogConnection =
              User     = parts["User"]
              Password = parts["Password"] }
 
-// TODO: properly encode concept ID
-let sanitize_id (concept_id :ConceptId) = concept_id
+let to_model_id (concept_id :ConceptId) = $"m:{concept_id}"
 
 [<IsReadOnly; Struct; NoComparison; NoEquality>]
 type private GraphUpdate = { adding :Triple seq; removing :Triple seq }
@@ -211,16 +225,8 @@ type Stardog(logger :ILogger<Stardog>, connection) =
     member my.Query(s) = my.RawQuery<SparqlResultSet>(s)
 
     member my.FetchConcepts concept_ids =
-        let id_list =
-            concept_ids |> Seq.map (sanitize_id >> sprintf "m:%s") |> String.concat ","
-
-        let q = id_list |> sprintf """
-SELECT *
-{
-  ?subject ?property ?value.
-  FILTER(?subject IN (%s))
-}
-    """
+        let id_list = concept_ids |> Seq.map to_model_id |> String.concat ","
+        let q = $" SELECT * {{ ?subject ?property ?value. FILTER(?subject IN (%s{id_list})) }} "
         in async {
             let! result = my.Query q
             logger.LogDebug("Loading FetchConcepts:{Count} results", result.Count)
@@ -228,7 +234,8 @@ SELECT *
         }
 
     member my.FetchConcept3 concept_id =
-        let q = concept_id |> sanitize_id |> sprintf """
+        let sanitized_id = to_model_id concept_id
+        let q = sprintf """
 SELECT ?subject ?property ?value
 {
   {
@@ -240,25 +247,33 @@ SELECT ?subject ?property ?value
       ?s :contains/:contains ?subject .
     }
     ?subject ?property ?value.
+    FILTER(?s = %s)
   }
   UNION
   {
-    ?s ?property ?value .
-    BIND(?s AS ?subject)
+    ?subject ?property ?value.
+    FILTER(?subject = %s)
   }
-  FILTER(?s = m:%s)
-}
-    """
-        in async {
-            let! result = my.Query q
+}"""
+        async {
+            let! result = my.Query (q sanitized_id sanitized_id)
             logger.LogDebug("Loading FetchConcepts3:{Count} results", result.Count)
             return result
+        }
+        
+    member my.FetchOwner concept_id =
+        let q = sprintf "SELECT * { ?subject :contains %s. }" (to_model_id concept_id)
+        async {
+            let! result = my.Query q
+            logger.LogDebug("Loading owner of {ConceptId}, got {Count} owners.", concept_id, result.Count)
+            return seq { for node in result.Results -> node["subject"].ExtractUri().snd() }
         }
         
     member private my.apply(graph, updates :inref<GraphUpdate>, change_log :inref<ModelChange>) =
         match change_log with
         | ConceptChange concept_change -> GraphUpdate.apply(graph, &updates, &concept_change)
         | Tag tag_change               -> GraphUpdate.apply(graph, &updates, &tag_change)
+        | OwnerChange _ -> updates // OwnerChange is a derived model, just ignore
         
     member my.apply(change_logs :ModelChange seq) =
         let graph = createGraph()

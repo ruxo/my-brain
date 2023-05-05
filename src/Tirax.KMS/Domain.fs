@@ -25,4 +25,6 @@ type Concept =
     override my.ToString() = my.name
 
 module Concept =
-    let empty = { id = String.Empty; name = String.Empty; contains = Set.empty; note = ValueNone; link = ValueNone; tags = Set.empty }
+    let empty = { id = String.Empty; name = String.Empty
+                  contains = Set.empty
+                  note = ValueNone; link = ValueNone; tags = Set.empty }

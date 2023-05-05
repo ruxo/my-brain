@@ -58,3 +58,16 @@ let showLink (concept :Domain.Concept) =
         
         concept.name
     }
+    
+// ====================================== LINK FOR BREADCRUMBS ========================================
+open System.Linq
+open RZ.FSharp.Extension
+[<Sealed>]
+type ConceptBreadcrumbItem(concept :Domain.Concept) =
+    inherit BreadcrumbItem(concept.name, "#")
+    
+    static let toItem concept = ConceptBreadcrumbItem(concept) :> BreadcrumbItem
+    
+    member _.Concept = concept
+    
+    static member For(concepts :Domain.Concept seq) = concepts.map(toItem).ToList()
