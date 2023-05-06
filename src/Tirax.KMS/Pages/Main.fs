@@ -181,26 +181,21 @@ module private MainPage =
                     let! sub_topics_result = server.fetch(topic.contains).toUICVal()
                     sub_topics_result |> loadingSection(renderSubTopics server)
                 }
-            
-            if topic.link.IsSome then
-                MudPaper'() {
-                    MudText'() { Typo ConceptDetailTitleTextSize; "References" }
-                    
-                    let link = topic.link.Value.ToString()
-                    MudLink'() {
-                        Href   link
-                        Target "_blank"
-                        
-                        link
-                    }
-                }
+                
+            let! topic_links = server.FetchLink(topic.link).toUICVal()
+            MudPaper'() {
+                MudText'() { Typo ConceptDetailTitleTextSize; "References" }
+                
+                topic_links |> loadingSection(fun links ->
+                    links.map(fun struct (name', uri) -> MudLink'() { Href uri; Target "_blank"; name' }) |> html.mergeNodes)
+            }
             
             MudPaper'() {
                 Classes   ["pa-3"; "ma-2"]
-                Height    ("50em")
-                Width     ("50em")
-                Elevation (2)
-                Outlined  (true)
+                Height    "50em"
+                Width     "50em"
+                Elevation 2
+                Outlined  true
                 MudText'() { Typo ConceptDetailTitleTextSize; "Note" }
                 MudText'() { topic.note.defaultValue(System.String.Empty) }
             }

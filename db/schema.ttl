@@ -5,10 +5,16 @@ prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 prefix xsd: <http://www.w3.org/2001/XMLSchema#>
 prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-:Context a rdf:Class .
+:Context a rdfs:Class .
 :Owner a rdf:Class; rdfs:subClassOf :Context.
-:note a rdf:Property ; rdfs:range xsd:string .
-:link a rdf:Property ; rdfs:range xsd:string .
+
+:HasNote a rdf:Class.
+:note a rdf:Property ; rdfs:domain :HasNote; rdfs:range xsd:string .
+
+:Linkable a rdf:Class.
+:link a rdf:Property ; rdfs:domain :Linkable; rdfs:range xsd:string; rdfs:range :Link.
+
+:Link a rdf:Class.
 
 :contains a rdf:Property; rdfs:domain :Owner; rdfs:range :Context.
 :relates a rdf:Property ; rdfs:domain :Context; rdfs:range :Context.

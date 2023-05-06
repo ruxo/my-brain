@@ -3,6 +3,7 @@
 open System.Runtime.CompilerServices
 open RZ.FSharp.Extension
 open Domain
+open Tirax.KMS.Domain
 
 [<Struct; IsReadOnly>]
 type ModelOperationType<'T> =
@@ -35,8 +36,9 @@ type ModelOperationTypeExtensions =
     
 [<Struct; IsReadOnly>]
 type ModelChange =
-    | Tag           of tag:ModelOperationType<ConceptTag>
-    | ConceptChange of concept:ModelOperationType<Concept>
-    | OwnerChange   of owner:ModelOperationType<struct (ConceptId * ConceptId list)>
+    | Tag              of tag:ModelOperationType<ConceptTag>
+    | ConceptChange    of concept:ModelOperationType<Concept>
+    | OwnerChange      of owner:ModelOperationType<struct (ConceptId * ConceptId list)>
+    | LinkObjectChange of link:ModelOperationType<LinkObject>
     
 type ChangeLogs = ModelChange seq

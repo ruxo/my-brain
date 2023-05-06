@@ -33,8 +33,40 @@ module Keywords =
     let RdfsLabel = Uri(RdfsNamespace + "label")
     let a = Uri(RdfsNamespace + "type")
     let Context = Uri(ConceptNamespace + "Context")
+    let contains = Uri(ConceptNamespace + "contains")
+    let link = Uri(ConceptNamespace + "link")
+    let Link = Uri(ConceptNamespace + "Link")
+    let note = Uri(ConceptNamespace + "note")
+    let Note = Uri(ConceptNamespace + "Note")
+    
+module Properties =
+    let a = UriNode(Keywords.a)
+    let contains = UriNode(Keywords.contains)
+    let label = UriNode(Keywords.RdfsLabel)
+    let link = UriNode(Keywords.link)
+    let note = UriNode(Keywords.note)
+    
+module ObjectTypes =
+    let Context = UriNode(Keywords.Context)
+    let Link = UriNode(Keywords.Link)
+    let Note = UriNode(Keywords.Note)
     
 module ModuleNamespaces =
+    [<Literal>]
+    let SchemaTag = ""
+    [<Literal>]
+    let ModelTag = "m"
+    [<Literal>]
+    let TagTag = "tag"
+    [<Literal>]
+    let RdfTag = "rdf"
+    [<Literal>]
+    let RdfsTag = "rdfs"
+    [<Literal>]
+    let XmlTag = "xsd"
+    
+    let StardogDefaultNamespace = UriFactory.Create("tag:stardog:api:context:default")
+
     let private tryNamespace (namespace' :string) (s :string) =
         if s.StartsWith(namespace')
         then ValueSome(struct (namespace', s.Substring(namespace'.Length)))
@@ -45,25 +77,23 @@ module ModuleNamespaces =
         | ValueSome v -> v.snd()
         | ValueNone   -> failwithf $"Invalid model URI: {s}"
 
-let private StardogDefaultNamespace = UriFactory.Create("tag:stardog:api:context:default")
-
-let private configureNamespaces(namespaces :INamespaceMapper) =
-    namespaces.AddNamespace(""    , UriFactory.Create(ConceptNamespace    ))
-    namespaces.AddNamespace("tag" , UriFactory.Create(TagNamespace        ))
-    namespaces.AddNamespace("xsd" , UriFactory.Create(XmlSchemaNamespace  ))
-    namespaces.AddNamespace("rdf" , UriFactory.Create(RdfNamespace        ))
-    namespaces.AddNamespace("rdfs", UriFactory.Create(RdfsNamespace       ))
-    namespaces.AddNamespace("m"   , UriFactory.Create(ConceptDataNamespace))
+    let configureNamespaces(namespaces :INamespaceMapper) =
+        namespaces.AddNamespace(SchemaTag, UriFactory.Create(ConceptNamespace    ))
+        namespaces.AddNamespace(TagTag   , UriFactory.Create(TagNamespace        ))
+        namespaces.AddNamespace(XmlTag   , UriFactory.Create(XmlSchemaNamespace  ))
+        namespaces.AddNamespace(RdfTag   , UriFactory.Create(RdfNamespace        ))
+        namespaces.AddNamespace(RdfsTag  , UriFactory.Create(RdfsNamespace       ))
+        namespaces.AddNamespace(ModelTag , UriFactory.Create(ConceptDataNamespace))
     
 let private namespace_mapper = NamespaceMapper(empty=true)
-configureNamespaces(namespace_mapper)
+ModuleNamespaces.configureNamespaces(namespace_mapper)
     
 type Graph with
     static member inline namespaceMap (g :Graph) = g.NamespaceMap
     
 let createGraph() =
-    Graph(StardogDefaultNamespace)
-    |> sideEffect (Graph.namespaceMap >> configureNamespaces)
+    Graph(ModuleNamespaces.StardogDefaultNamespace)
+    |> sideEffect (Graph.namespaceMap >> ModuleNamespaces.configureNamespaces)
 
 [<Struct; IsReadOnly; NoComparison; NoEquality>]
 type KmsSubject =
@@ -71,29 +101,28 @@ type KmsSubject =
       g       :Graph }
       
     member my.isContext =
-        let p = my.g.createRdfsUri "type"
-        let t = my.g.createSchemaUri "Context"
-        in  Triple(my.subject, p, t)
+        Triple(my.subject, Properties.a, ObjectTypes.Context)
+        
+    member my.isLink =
+        Triple(my.subject, Properties.a, ObjectTypes.Link)
         
     member my.hasName(name :string) =
-        let p = my.g.createRdfsUri "label"
         let t = my.g.CreateLiteralNode(name)
-        in  Triple(my.subject, p, t)
+        in Triple(my.subject, Properties.label, t)
         
     member my.contains(cid :ConceptId) =
-        let p = my.g.createSchemaUri "contains"
         let t = my.g.createModelUri(cid)
-        in  Triple(my.subject, p, t)
+        in Triple(my.subject, Properties.contains, t)
         
     member my.hasNote(note) =
-        let p = my.g.createSchemaUri "note"
         let t = my.g.CreateLiteralNode(note)
-        in  Triple(my.subject, p, t)
+        in Triple(my.subject, Properties.note, t)
         
-    member my.hasLink(link :Uri) =
-        let p = my.g.createSchemaUri "link"
-        let t = my.g.CreateLiteralNode(link.ToString())
-        in  Triple(my.subject, p, t)
+    member my.hasLink(link :ConceptLink) =
+        let g = my.g
+        match link with
+        | PureLink uri    -> Triple(my.subject, Properties.link, g.CreateLiteralNode(uri.ToString()))
+        | Link concept_id -> Triple(my.subject, Properties.link, g.createModelUri(concept_id))
         
     member my.hasTag(tag) =
         let p = my.g.createSchemaUri "tag"
@@ -117,7 +146,8 @@ and Graph with
             subject.hasName(concept.name)
             yield! seq { for cid in concept.contains -> subject.contains(cid) }
             if concept.note.IsSome then subject.hasNote(concept.note.Value)
-            if concept.link.IsSome then subject.hasLink(concept.link.Value)
+            for link in concept.link do
+                subject.hasLink(link)
             yield! seq { for tag in concept.tags -> subject.hasTag(tag) }
         }
     
@@ -128,21 +158,152 @@ and Graph with
             subject.hasName(tag.name)
         }
         
-exception InvalidNodeOperation of INode
+open ModuleNamespaces
+
+[<Struct; IsReadOnly; NoComparison>]
+type ModelVerbs =
+    | IsType
+    | DefineName
+    | SubClassOf
+    | Contains
+    | HasNote
+    | HasLink
+    | HasTag
+            
+exception InvalidNodeOperation of string * INode
+
+type EntityType = (struct (string * string))
+
+[<Extension>]
+type EntityTypeExtension =
+    [<Extension>]
+    static member inline Tag(entity :EntityType) = entity.fst()
+    [<Extension>]
+    static member inline Name(entity :EntityType) = entity.snd()
 
 type INode with
-    member node.ExtractUri() =
+    member node.TryExtractUri() :EntityType voption =
         match node with
         | :? IUriNode as uri ->
             let ok, name = namespace_mapper.ReduceToQName(uri.Uri.ToString())
             if ok then
                 let parts = name.Split(':')
-                struct (parts[0], parts[1])
+                ValueSome(struct (parts[0], parts[1]))
             else
-                raise(RdfException $"Model {uri.Uri} is not recognized")
-        | _ -> raise(InvalidNodeOperation node)
+                ValueNone
+        | _ -> ValueNone
+        
+    member node.ExtractUri() :EntityType =
+        match node.TryExtractUri() with
+        | ValueSome v -> v
+        | ValueNone   -> raise(InvalidNodeOperation("Not an URI node", node))
+        
+    member node.AsConceptId =
+        let entity = node.ExtractUri() 
+        match entity with
+        | ModelTag, name -> name
+        | _ -> raise(InvalidNodeOperation($"%A{entity} is not a model name", node))
+        
+    member node.AsVerb =
+        let entity = node.ExtractUri()
+        match entity with
+        | RdfTag   , "type"
+        | RdfsTag  , "type"      -> IsType
+        | RdfsTag  , "label"     -> DefineName
+        | RdfsTag  , "subClassOf"-> SubClassOf
+        | SchemaTag, "contains"  -> Contains
+        | SchemaTag, "note"      -> HasNote
+        | SchemaTag, "link"      -> HasLink
+        | SchemaTag, "tag"       -> HasTag
+        | _ -> raise(InvalidNodeOperation($"Unknown verb %A{entity}", node))
+        
+    member node.AsString =
+        match node with
+        | :? ILiteralNode as literal -> literal.Value
+        | _ -> raise(InvalidNodeOperation("Not a literal node", node))
+        
+// ==================================== OBJECT MATERIALIZATION ========================================
+module Materialization =
+    [<Struct; IsReadOnly; NoComparison; NoEquality>]
+    type PropertyDefinition =
+        | TypeOf     of type':EntityType
+        | Name       of name:string
+        | SubClassOf of class':EntityType
+        | HasConcept of id:ConceptId
+        | HasNote    of note:string
+        | HasLink    of link:ConceptLink
+        | HasTag     of tag:ConceptId
+        
+        static member inline TryGetName(p) = match p with Name name -> ValueSome name | _ -> ValueNone
+        
+    let extractLink(value: INode) =
+        match value.TryExtractUri() with
+        | ValueNone                    -> HasLink(PureLink(URI value.AsString))
+        | ValueSome(ModelTag, link_id) -> HasLink(Link link_id)
+        | ValueSome entity             -> raise(InvalidNodeOperation($"%A{entity} is not a valid link node", value))
+    
+    let extractProperty(property :INode, value :INode) =
+        match property.AsVerb with
+        | IsType                -> TypeOf(value.ExtractUri())
+        | ModelVerbs.SubClassOf -> SubClassOf(value.ExtractUri())
+        | DefineName            -> Name value.AsString
+        | Contains              -> HasConcept value.AsConceptId
+        | ModelVerbs.HasNote    -> HasNote value.AsString
+        | ModelVerbs.HasLink    -> extractLink value
+        | ModelVerbs.HasTag     -> HasTag(value.AsConceptId)
+            
+    let extract (r :ISparqlResult) =
+        let concept_id = r["subject"].AsConceptId
+        let definition = extractProperty(r["property"], r["value"])
+        struct (concept_id, definition)
+        
+    let groupProperties (object_properties :struct (ConceptId * PropertyDefinition) seq) = 
+        query {
+            for id, prop in object_properties do
+            groupValBy prop id into g
+            select struct (g.Key, g :> PropertyDefinition seq)
+        }
+        
+    let groupObjectProperties = Seq.map extract >> groupProperties
+        
+    exception IncompatibleProperty of string * PropertyDefinition
+    exception ObjectDataCorrupted  of string
 
+    let createConcept(struct (id, props)) =
+        let new_concept = { Concept.empty with id = id }
+        props
+        |> Seq.fold (fun concept p ->
+                       match p with
+                       | TypeOf(SchemaTag, "Context") -> concept
+                       | Name name     -> { concept with Concept.name=name }
+                       | HasTag tag    -> { concept with tags=concept.tags.Add(tag) }
+                       | HasConcept id -> { concept with contains=concept.contains.Add(id) }
+                       | HasNote note  -> { concept with note=ValueSome(note) }
+                       | HasLink link  -> { concept with link=concept.link.Add(link) }
+                       | TypeOf(type') -> raise(ObjectDataCorrupted $"Unrecognize type %A{type'} of an object %s{id}")
+                       | SubClassOf _  -> raise(ObjectDataCorrupted $"Found SubClassOf property in an object %s{id}")
+                    ) new_concept
+        
+    let inline createConcepts object_properties =
+        object_properties |> Seq.map(createConcept)
+    
+    let createLinkObject struct (id, props :PropertyDefinition seq) =
+        let mutable description = ValueNone
+        let mutable uri = ValueNone
+        for p in props do
+            match p with
+            | TypeOf(SchemaTag, "Link") -> ()  // correct type for Link
+            | Name name                 -> assert description.IsNone; description <- ValueSome(name)
+            | HasLink(PureLink link)    -> assert uri.IsNone        ; uri <- ValueSome(link)
+            | _                         -> raise(IncompatibleProperty("Not support property for link", p))
+        if uri.IsNone then raise(ObjectDataCorrupted "LinkObject is missing a URI!")
+        let uri = uri.Value
+        { id=id; name=description; uri=uri}
+    
 // ========================================== GRAPH UPDATE ============================================
+
+open Materialization
+
 module ToTriples =
     type ToTriples<'T> =
         abstract member toTriples: Graph -> 'T -> Triple seq
@@ -157,7 +318,7 @@ module ToTriples =
                     subject.hasName(concept.name)
                     yield! seq { for cid in concept.contains -> subject.contains(cid) }
                     if concept.note.IsSome then subject.hasNote(concept.note.Value)
-                    if concept.link.IsSome then subject.hasLink(concept.link.Value)
+                    yield! seq { for link in concept.link -> subject.hasLink(link) }
                     yield! seq { for tag in concept.tags -> subject.hasTag(tag) }
                 }
                 
@@ -172,9 +333,21 @@ module ToTriples =
                 }
                 
     [<Struct; IsReadOnly; NoComparison; NoEquality>]
+    type LinkToTriples =
+        interface ToTriples<LinkObject> with
+            member _.toTriples g link =
+                let subject = g.createSubject(link.id)
+                seq {
+                    subject.isLink
+                    if link.name.IsSome then subject.hasName(link.name.Value)
+                    subject.hasLink(PureLink link.uri)
+                }
+                
+    [<Struct; IsReadOnly; NoComparison; NoEquality>]
     type ToTriples =
         static member inline ($) (_: ToTriples, _: Concept)    = Unchecked.defaultof<ConceptToTriples>
         static member inline ($) (_: ToTriples, _: ConceptTag) = Unchecked.defaultof<TagToTriples>
+        static member inline ($) (_: ToTriples, _: LinkObject) = Unchecked.defaultof<LinkToTriples>
         
     let inline with' (x :'T) :^m when ^m :> ToTriples<'T> = Unchecked.defaultof<ToTriples> $ x
     
@@ -223,43 +396,37 @@ type Stardog(logger :ILogger<Stardog>, connection) =
         }
 
     member my.Query(s) = my.RawQuery<SparqlResultSet>(s)
+        
+    member my.FetchLinks(link_ids) =
+        let link_expression = link_ids |> Seq.map to_model_id |> String.concat ","
+        if String.IsNullOrEmpty(link_expression) then
+            async.Return(Seq.empty)
+        else
+            let q = sprintf """SELECT * { ?subject ?property ?value. ?subject a :Link. FILTER(?subject IN (%s)) }""" link_expression
+            async {
+                let! result = my.Query(q)
+                return result |> Seq.map extract
+                              |> groupProperties
+                              |> Seq.map createLinkObject
+            }
+            
+    member private my.FetchConcepts(q) =
+        async {
+            let!result = my.Query q
+            logger.LogDebug("Loading FetchConcepts:{Count} results", result.Count)
+            let object_properties = groupObjectProperties result
+            return createConcepts(object_properties)
+        }
 
     member my.FetchConcepts concept_ids =
         let id_list = concept_ids |> Seq.map to_model_id |> String.concat ","
         let q = $" SELECT * {{ ?subject ?property ?value. FILTER(?subject IN (%s{id_list})) }} "
-        in async {
-            let! result = my.Query q
-            logger.LogDebug("Loading FetchConcepts:{Count} results", result.Count)
-            return result
-        }
+        my.FetchConcepts(q)
 
-    member my.FetchConcept3 concept_id =
+    member my.FetchConcept(concept_id) =
         let sanitized_id = to_model_id concept_id
-        let q = sprintf """
-SELECT ?subject ?property ?value
-{
-  {
-    {
-      ?s :contains ?subject .    
-    }
-    UNION
-    {
-      ?s :contains/:contains ?subject .
-    }
-    ?subject ?property ?value.
-    FILTER(?s = %s)
-  }
-  UNION
-  {
-    ?subject ?property ?value.
-    FILTER(?subject = %s)
-  }
-}"""
-        async {
-            let! result = my.Query (q sanitized_id sanitized_id)
-            logger.LogDebug("Loading FetchConcepts3:{Count} results", result.Count)
-            return result
-        }
+        let q = sprintf """SELECT * { ?subject ?property ?value. FILTER(?subject = %s) }"""
+        my.FetchConcepts(q sanitized_id)
         
     member my.FetchOwner concept_id =
         let q = sprintf "SELECT * { ?subject :contains %s. }" (to_model_id concept_id)
@@ -269,11 +436,22 @@ SELECT ?subject ?property ?value
             return seq { for node in result.Results -> node["subject"].ExtractUri().snd() }
         }
         
+    member my.GetTags() =
+        let q = """SELECT * { ?subject ?property ?target. ?subject rdfs:subClassOf :Tag. FILTER(?property != rdf:type) }"""
+        async {
+            let! result = my.Query q
+            let object_properties = groupObjectProperties result
+            return object_properties.map(fun struct (id, props) ->
+                                            { id   = id
+                                              name = props.tryPick(PropertyDefinition.TryGetName).defaultValue(id) })
+        }
+        
     member private my.apply(graph, updates :inref<GraphUpdate>, change_log :inref<ModelChange>) =
         match change_log with
         | ConceptChange concept_change -> GraphUpdate.apply(graph, &updates, &concept_change)
         | Tag tag_change               -> GraphUpdate.apply(graph, &updates, &tag_change)
         | OwnerChange _ -> updates // OwnerChange is a derived model, just ignore
+        | LinkObjectChange link_change -> GraphUpdate.apply(graph, &updates, &link_change)
         
     member my.apply(change_logs :ModelChange seq) =
         let graph = createGraph()
@@ -294,7 +472,7 @@ SELECT ?subject ?property ?value
                 for r in result.Results do
                 cancel_token.ThrowIfCancellationRequested()
                 let node :IUriNode = downcast r["subject"]
-                ModuleNamespaces.getModelId(node.Uri.ToString())
+                getModelId(node.Uri.ToString())
             }
         }
         

@@ -5,196 +5,26 @@ open System.Runtime.CompilerServices
 open System.Text.RegularExpressions
 open System.Threading.Tasks
 open RZ.FSharp.Extension
-open RZ.FSharp.Extension.ValueOption
 open RZ.FSharp.Extension.ValueResult
-open VDS.RDF
-open VDS.RDF.Query
 open Tirax.KMS
 open Tirax.KMS.Domain
 open Tirax.KMS.Stardog
-
-[<Literal>]
-let ConceptNamespace = "http://ruxoz.net/rdfs/schema/knowledge/"
-
-[<Literal>]
-let ConceptDataNamespace = "http://ruxoz.net/rdfs/model/knowledge/"
-
-[<Literal>]
-let XmlSchemaNamespace = "http://www.w3.org/2001/XMLSchema#"
-
-[<Literal>]
-let RdfNamespace = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-
-[<Literal>]
-let RdfsNamespace = "http://www.w3.org/2000/01/rdf-schema#"
-
-let StardogDefaultNamespace = Uri("tag:stardog:context:default")
-
-let private configureNamespaces(namespaces :INamespaceMapper) =
-    namespaces.AddNamespace(""    , UriFactory.Create(ConceptNamespace    ))
-    namespaces.AddNamespace("m"   , UriFactory.Create(ConceptDataNamespace))
-    namespaces.AddNamespace("xsd" , UriFactory.Create(XmlSchemaNamespace  ))
-    namespaces.AddNamespace("rdf" , UriFactory.Create(RdfNamespace        ))
-    namespaces.AddNamespace("rdfs", UriFactory.Create(RdfsNamespace       ))
-    
-let private createGraph() =
-    Graph(StardogDefaultNamespace)
-    |> sideEffect (Graph.namespaceMap >> configureNamespaces)
-
-let private tryNamespace (namespace' :string) (s :string) =
-    if s.StartsWith(namespace')
-    then ValueSome(struct (namespace', s.Substring(namespace'.Length)))
-    else ValueNone
-    
-[<return: Struct>]
-let (|ConceptType|_|)= tryNamespace ConceptNamespace
-[<return: Struct>]
-let (|XMLSchema|_|)  = tryNamespace XmlSchemaNamespace
-[<return: Struct>]
-let (|RDFPattern|_|) = tryNamespace RdfNamespace
-[<return: Struct>]
-let (|RDFS|_|)       = tryNamespace RdfsNamespace
-
-[<RequireQualifiedAccess; Struct; IsReadOnly>]
-type SparqlDataType =
-    | Integer of i:int64
-    | Decimal of dm:decimal
-    | Float of f:float32
-    | Double of fd:float
-    | String of s:string
-    | Boolean of b:bool
-    | DateTime of dt:DateTimeOffset
-with
-    member me.AsString() =
-        match me with SparqlDataType.String s -> s | _ -> failwith "Not a string"
-
-[<RequireQualifiedAccess>]
-[<Struct; IsReadOnly>]
-type SparqlValue =
-    | Uri of uri:Uri
-    | Literal of value:SparqlDataType
-
-[<Struct; IsReadOnly>]
-type RdfProperties =
-    | RdfClass of cls:struct (string * string)
-    | RdfSubclass of struct (string * string)
-    | RdfProperty
-    | RdfLabel of label:string
-    
-[<Struct; IsReadOnly>]
-type ConceptProperties =
-    | RDF of rdf_prop:RdfProperties
-    | Contains of content:string
-    | Note of note:string
-    | Link of link:Uri
-    | Tag of tag:ConceptId
-    
-    member my.asLabel() =
-        match my with
-        | RDF (RdfLabel name) -> ValueSome name
-        | _ -> ValueNone
-        
-    static member inline asLabel (my :ConceptProperties) = my.asLabel()
-
-[<AbstractClass>]
-type SparqlNode =
-    static member getUri (node :INode) = (node :?> UriNode).Uri.ToString()
-    
-    static member parse datatype value =
-        match datatype with
-        | "integer" -> parseInt64(value).map(SparqlDataType.Integer)
-        | "decimal" -> parseDecimal(value).map(SparqlDataType.Decimal)
-        | "float"   -> parseFloat(value).map(SparqlDataType.Float)
-        | "double"  -> parseDouble(value).map(SparqlDataType.Double)
-        | "string"  -> ValueSome(SparqlDataType.String value)
-        | "boolean" -> parseBool(value).map(SparqlDataType.Boolean)
-        | "dateTime"-> parseDateTimeOffset(value).map(SparqlDataType.DateTime)
-        | _ -> ValueNone
-    
-    static member getLiteral (node :INode) =
-        let n = node :?> LiteralNode
-        let v = voption {
-            let! datatype = n.DataType.ToString() |> tryNamespace XmlSchemaNamespace
-            return! SparqlNode.parse (datatype.snd()) n.Value
-        }
-        v.unwrap()
-
-let private extractSubject result =
-    let uri = SparqlNode.getUri result
-    assert uri.StartsWith(ConceptDataNamespace)
-    uri.Substring(ConceptDataNamespace.Length)
-
-let private extractProperty property value =
-    let property_uri = SparqlNode.getUri property
-    match property_uri with
-    | RDFS       (_,t) when t = "label" -> SparqlNode.getLiteral(value).AsString() |> RdfLabel |> RDF
-    | RDFS       (_,t) when t = "type"  -> match SparqlNode.getUri value with
-                                           | RDFPattern  t -> RDF (RdfClass t)
-                                           | ConceptType t -> RDF (RdfClass t)
-                                           | XMLSchema   t -> RDF (RdfClass t)
-                                           | RDFS        t -> RDF (RdfClass t)
-                                           | _ -> failwithf $"Unrecognize type {value}"
-    | RDFPattern (_,t) when t = "type"  -> match SparqlNode.getUri value with
-                                           | RDFPattern  t -> RDF (RdfClass t)
-                                           | ConceptType t -> RDF (RdfClass t)
-                                           | XMLSchema   t -> RDF (RdfClass t)
-                                           | RDFS        t -> RDF (RdfClass t)
-                                           | _ -> failwithf $"Unrecognize type {value}"
-                                      
-    | RDFS (_,id as t) when id = "subClassOf" -> RDF (RdfSubclass t)
-    | ConceptType (_,t) -> match t with
-                           | "contains" -> Contains <| extractSubject value
-                           | "note"     -> Note     <| SparqlNode.getLiteral(value).AsString()
-                           | "link"     -> Link     <| Uri(SparqlNode.getLiteral(value).AsString())
-                           | _          -> raise    <| NotSupportedException($"Concept type {t} is not supported")
-    | _ -> failwith $"Unrecognized property %s{property_uri} with %A{value}"
-
-let private extract (r :ISparqlResult) =
-    let subject = r["subject"] |> extractSubject
-    let data = extractProperty r["property"] r["value"]
-    subject, data
-        
-let private groupProperties (result :SparqlResultSet) = 
-    query {
-        for r in result do
-        let key, prop = extract r
-        groupValBy prop key into g
-        select struct (g.Key, g :> ConceptProperties seq)
-    }
-        
-type Stardog with
-    member my.GetTags() =
-        let q = """
-SELECT *
-{
-    ?subject ?property ?target.
-    ?subject rdfs:subClassOf :Tag.
-    FILTER(?property != rdf:type)
-}
-"""
-        async {
-            let! result = my.Query q
-            let tags = groupProperties(result)
-            return tags.map(fun struct (id, props) ->
-                                { id   = id
-                                  name = props.tryPick(ConceptProperties.asLabel).defaultValue(id) })
-        }
 
 [<Struct; IsReadOnly;NoComparison;NoEquality>]
 type ServerState =
     { version  :uint64
       tags     :Map<ConceptId, ConceptTag>
       concepts :Map<ConceptId, Concept>
+      links    :Map<ConceptId, LinkObject>
       owners   :Map<ConceptId, ConceptId list> }
     
-    
-
 module ChangeLogs =
     let applyChange state change =
         match change with
         | ConceptChange c   -> { state with concepts = c.apply(state.concepts, fun ct -> ct.id) }
-        | ModelChange.Tag t -> { state with tags = t.apply(state.tags, fun tag -> tag.id) }
-        | OwnerChange o     -> { state with owners = o.applyKeyValue(state.owners) }
+        | ModelChange.Tag t -> { state with tags     = t.apply(state.tags, fun tag -> tag.id) }
+        | OwnerChange o     -> { state with owners   = o.applyKeyValue(state.owners) }
+        | LinkObjectChange l-> { state with links    = l.apply(state.links, fun l -> l.id) }
     
     let apply state changes =
         let new' = changes |> Seq.fold applyChange state
@@ -203,45 +33,23 @@ module ChangeLogs =
 type TransactionResult<'T> = ServerState -> Async<struct (ChangeLogs * ValueResult<'T,exn>)>
 
 module Operations =
-    let private from (tag_map :Map<ConceptId,ConceptTag>) struct (id, props :ConceptProperties seq) =
-        let new_concept = { Concept.empty with id = id }
-        props.fold(new_concept, fun concept p ->
-                   match p with
-                   | RDF (RdfLabel label)    -> { concept with name=label }
-                   | RDF (RdfClass (cls,id)) -> if cls = ConceptNamespace && tag_map.ContainsKey(id)
-                                                then { concept with tags=concept.tags.Add(id) }
-                                                else   concept
-                   | Contains id             -> { concept with contains=concept.contains.Add(id) }
-                   | Note note               -> { concept with note=ValueSome(note) }
-                   | Link link               -> { concept with link=ValueSome(link) }
-                   | _                       -> failwith $"Not support property %A{p}"
-                   )
-        
-    let private getConcepts struct (tag_map, result :SparqlResultSet) =
-        groupProperties(result).map(from tag_map)
-        
-    let private updateState state graph_result =
-        let concepts = getConcepts(state.tags, graph_result).cache()
-        let existing, new' = concepts.toArray() |> Array.partition (fun concept -> state.concepts.containsKey(concept.id))
-        let existing_dict = existing.map(fun c -> struct (c.id, c)).toMap()
-        let makeUpdate concept = Update(existing_dict[concept.id], concept) |> ModelChange.ConceptChange
-        let changes = new'.map(Add >> ModelChange.ConceptChange).append(existing.map makeUpdate)
-        struct (changes, concepts.toMap(fun c -> c.id))
-        
-    let fetch (db :Stardog) id state = async {
-        let! graph_result = db.FetchConcept3 id
-        let struct (changes, map) = updateState state graph_result
-        return struct (changes, ValueOk <| map.tryGet(id))
+    let fetch (db :Stardog) id _ = async {
+        let!concepts = db.FetchConcept(id)
+        let concepts = concepts.toArray()
+        assert(concepts.Length <= 1)
+        let changes = concepts |> Seq.map (Add >> ConceptChange)
+        return struct (changes, ValueOk(concepts.tryFirst()))
     }
         
-    let fetchMany (db :Stardog) ids state = async {
+    let fetchMany (db :Stardog) ids _ = async {
         let ids = ids |> Seq.toArray
         if ids.Length = 0 then
             return struct (Seq.empty, ValueOk Seq.empty)
         else
-            let! graph_result = db.FetchConcepts ids
-            let struct (changes, map) = updateState state graph_result
-            return struct (changes, ids.choose(map.tryGet) |> ValueOk)
+            let!concepts = db.FetchConcepts ids
+            let concepts = concepts.toArray()
+            let changes  = concepts |> Seq.map (Add >> ConceptChange)
+            return struct (changes, ValueOk concepts)
     }
     
     let fetchOwner(db :Stardog, concept_id) state =
@@ -253,6 +61,17 @@ module Operations =
                                        | ValueNone   -> Add change
                                        | ValueSome v -> let old = struct (concept_id, v) in Update(old, change))
             return struct (Seq.singleton changes, ValueOk result)
+        }
+        
+    let fetchLinks (db :Stardog) ids _ =
+        async {
+            let ids = ids |> Seq.toArray
+            if ids.isEmpty() then
+                return struct (Seq.empty, ValueOk(Seq.empty))
+            else
+                let! link = db.FetchLinks(ids)
+                let changes = link |> Seq.map (Add >> LinkObjectChange)
+                return struct (changes, ValueOk(link))
         }
     
     let addConcept(db :Stardog, concept, target) state =
@@ -275,7 +94,7 @@ module Operations =
                 return struct (changes.append(owner_list_changes), ValueOk updated)
         }
         
-    let updateConcept(db :Stardog, current_concept, new_concept) state =
+    let updateConcept(db :Stardog, current_concept, new_concept) _ =
         assert(current_concept.id = new_concept.id)
         async {
             let changes = seq { ConceptChange(Update(current_concept, new_concept)) }
@@ -292,6 +111,7 @@ type Server(db :Stardog) =
             return { version = 0UL
                      tags = tags.toMap(fun tag -> tag.id)
                      concepts = Map.empty
+                     links = Map.empty
                      owners = Map.empty }
         }
 
@@ -346,6 +166,24 @@ type Server(db :Stardog) =
         else let! fetched_concepts = my.transact(Operations.fetchMany db need_fetches)
              return existed.append(fetched_concepts)
     }
+    
+    member server.FetchLink(links) =
+        async {
+            let! state = Async.AwaitTask snapshot
+            
+            let pures, link_ids        = links    |> Seq.toArray |> Array.partition(ConceptLink.IsPure)
+            let existing, new_link_ids = link_ids |> Array.map ConceptLink.GetLinkId |> Array.partition(state.links.ContainsKey)
+            let! new_links             = server.transact(Operations.fetchLinks db new_link_ids)
+            
+            let pure_links     = pures |> Seq.map ConceptLink.GetPureUri |> Seq.map (fun uri -> struct (uri, uri))
+            let existing_links = existing |> Seq.map (fun id -> state.links[id])
+            let display_links  =
+                existing_links
+                |> Seq.append new_links
+                |> Seq.map (fun { id=_; name=name; uri=(URI uri) } -> struct (name.defaultValue(uri), uri)) 
+            
+            return pure_links |> Seq.append display_links
+        }
     
     member my.addConcept(new_concept, topic) =
         my.transact(Operations.addConcept(db, new_concept, topic))
