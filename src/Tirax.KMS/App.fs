@@ -3,7 +3,7 @@
 // It has dependency requirement: the root is the app which is used in the Index.fs
 // All other files which want have hot reload, need to drill down to that file, and all the middle file should also add the '// hot-reload' flag at the top of that file
 [<AutoOpen>]
-module Tirax.KMS.App
+module Tirax.KMS.Appx
 
 open System
 open Microsoft.AspNetCore.Components.Routing
