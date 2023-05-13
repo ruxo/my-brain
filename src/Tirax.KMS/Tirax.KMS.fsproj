@@ -17,15 +17,11 @@
 	</PropertyGroup>
 	
 	<ItemGroup>
-		<Compile Include="Fun.Blazor.Bindings\MudBlazor.fs" />
-		<Compile Include="Fun.Blazor.Bindings\Microsoft.AspNetCore.Components.fs" />
-		<Compile Include="Fun.Blazor.Bindings\Microsoft.AspNetCore.Components.Authorization.fs" />
 		<Compile Include="ObservableExtensions.fs" />
 		<Compile Include="Domain.fs" />
 		<Compile Include="ChangeLogs.fs" />
 		<Compile Include="Stardog.fs" />
 		<Compile Include="Server.fs" />
-		<Compile Include="AppModel.fs" />
 		<Compile Include="UiHelpers.fs" />
 		<Compile Include="Pages\AddDialog.fs" />
 		<Compile Include="Pages\Main.fs" />
@@ -35,9 +31,7 @@
 	<ItemGroup>
 		<PackageReference Include="dotNetRdf" Version="3.0.0" />
 		<PackageReference Include="FSharp.Control.Reactive" Version="5.0.5" />
-		<PackageReference Include="Fun.Blazor.HotReload" Version="3.0.*" Condition="'$(Configuration)'=='DEBUG'" />
-		<PackageReference Include="Fun.Blazor.Server" Version="3.0.*" />
-		<PackageReference Include="MudBlazor" Version="6.2.2" />
+		<PackageReference Include="ReactiveUI" Version="18.4.44" />
 		<PackageReference Include="RZ.FSharp.Extension" Version="2.1.3-alpha.0.2" />
 	</ItemGroup>
 
