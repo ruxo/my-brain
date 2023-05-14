@@ -1,0 +1,8 @@
+﻿@inherits ReactiveComponentBase<AppModel.ViewModel>
+
+<MudDrawer ClipMode="DrawerClipMode.Always" Elevation="2" Open="ViewModel?.DrawerIsOpen ?? false">
+    <MudNavMenu>
+        <MudNavLink Href="/" Match="NavLinkMatch.All">Home</MudNavLink>
+        <MudNavGroup Title="Favorites" />
+    </MudNavMenu> 
+</MudDrawer>

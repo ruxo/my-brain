@@ -10,9 +10,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{E1F8D3DD-28AC-4A26-AA78-8776D6DAFF03}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
-		db\schema.ttl = db\schema.ttl
 		src\CommonGlobalUsings.cs = src\CommonGlobalUsings.cs
 		src\Directory.Build.props = src\Directory.Build.props
+		db\schema.cypher = db\schema.cypher
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tirax.KMS.App", "src\Tirax.KMS.App\Tirax.KMS.App.csproj", "{EE733A6B-63FE-407E-BF28-04CA650284A7}"

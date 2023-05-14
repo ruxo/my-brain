@@ -1,0 +1,29 @@
+﻿@using Tirax.KMS.Server
+@inherits ReactiveComponentBase<AppModel.ViewModel>
+@inject IKmsServer Server
+
+<MudAppBar Elevation="1">
+    <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                   OnClick="ToggleIsOpen" />
+    
+    <MudLink Typo="Typo.h5" Color="Color.Surface" Underline="Underline.None" Class="mx-3" 
+             OnClick="GoHome">Tirax KMS</MudLink>
+    
+    <MudAutocomplete T="Domain.Concept" Label="Search" SelectOnClick="true" Variant="Variant.Outlined"
+                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" 
+                     AdornmentColor="Color.Secondary" Margin="Margin.Dense" DebounceInterval="200"
+                     SearchFuncWithCancel="Search"
+                     ValueChanged="concept => ViewModel!.CurrentTopic = concept.Id">
+        
+    </MudAutocomplete>
+</MudAppBar>
+
+@code {
+    async Task<IEnumerable<Domain.Concept>> Search(string s, CancellationToken ct) =>
+        string.IsNullOrWhiteSpace(s)
+            ? Enumerable.Empty<Domain.Concept>()
+            : await Server.Search(s.Trim(), ct);
+
+    Task ToggleIsOpen() => ViewModel!.ToggleDrawerOpen.Execute().ToTask();
+    Task GoHome() => ViewModel!.GoHome.Execute().ToTask();
+}

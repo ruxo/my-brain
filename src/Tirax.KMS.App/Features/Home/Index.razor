@@ -1,0 +1,15 @@
+﻿@page "/"
+@inherits ReactiveComponentBase<AppModel.ViewModel>
+
+<TopBar ViewModel="ViewModel" />
+<Drawer ViewModel="ViewModel" />
+
+<MudMainContent>
+    <div class="ma-3 pa-3">
+        <LoadingSection Value="ViewModel?.CurrentConcept">
+            <View>
+                <h1>@context.Name</h1>
+            </View>
+        </LoadingSection>
+    </div>
+</MudMainContent>

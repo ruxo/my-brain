@@ -1,0 +1,30 @@
+﻿@using Tirax.KMS.Domain
+@typeparam TItem
+
+@switch (Value) {
+    case Observation<TItem>.Loading or null:
+        @("💿")
+        break;
+    case Observation<TItem>.Data {Value: var data}:
+        @View(data)
+        break;
+    case Observation<TItem>.Failed error:
+        <MudAlert Severity="Severity.Warning">
+            <div>
+                <div>Loading failed. Please try again later.</div>
+                <MudDivider />
+                <div>@error.ToString()</div>
+            </div>
+        </MudAlert>
+        break;
+}
+
+@code {
+
+    [Parameter, EditorRequired]
+    public Observation<TItem> Value { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public RenderFragment<TItem> View { get; set; } = default!;
+
+}
