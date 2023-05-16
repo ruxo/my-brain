@@ -11,9 +11,11 @@ namespace Tirax.KMS.Server;
 
 public interface IKmsServer : IDisposable
 {
-    Task<Concept> GetHome();
-    Task<Option<Concept>> Fetch(ConceptId id);
-    Task<Seq<Concept>> Search(string keyword, CancellationToken cancellationToken);
+    ValueTask<Concept> GetHome();
+    ValueTask<Option<Concept>> Fetch(ConceptId id);
+    ValueTask<Seq<Concept>> Search(string keyword, CancellationToken cancellationToken);
+
+    ValueTask<Concept> CreateSubConcept(ConceptId owner, string name);
 }
 
 public sealed class KmsServer : IKmsServer
@@ -36,7 +38,7 @@ public sealed class KmsServer : IKmsServer
                              tags.Map(t => (t.Id, t)).ToMap(),
                              Map.empty<ConceptId, Concept>().Add(home.Id, home),
                              Map.empty<ConceptId, LinkObject>(),
-                             Map.empty<ConceptId, List<ConceptId>>());
+                             Map.empty<ConceptId, Lst<ConceptId>>());
         });
 
         Task.Factory.StartNew(InboxProcessor, TaskCreationOptions.LongRunning | TaskCreationOptions.AttachedToParent);
@@ -50,12 +52,12 @@ public sealed class KmsServer : IKmsServer
         inbox.Dispose();
     }
 
-    public async Task<Concept> GetHome() {
+    public async ValueTask<Concept> GetHome() {
         var state = await snapshot;
         return state.Concepts[state.Home.Get()];
     }
 
-    public async Task<Option<Concept>> Fetch(ConceptId id) {
+    public async ValueTask<Option<Concept>> Fetch(ConceptId id) {
         var state = await snapshot;
         if (state.Concepts.Get(id).IfSome(out var v))
             return Some(v);
@@ -65,10 +67,15 @@ public sealed class KmsServer : IKmsServer
         }
     }
 
-    public Task<Seq<Concept>> Search(string keyword, CancellationToken cancellationToken) {
+    public ValueTask<Seq<Concept>> Search(string keyword, CancellationToken cancellationToken) {
         throw new NotImplementedException();
     }
-    
+
+    public async ValueTask<Concept> CreateSubConcept(ConceptId owner, string name) {
+        await using var session = db.Session();
+        return await Transact(Operations.CreateSubConcept(session, owner, name));
+    }
+
     #region Transaction methods
 
     Task<T> Transact<T>(TransactionResult<T> operation) {
@@ -127,7 +134,7 @@ public sealed class KmsServer : IKmsServer
         Map<ConceptId, ConceptTag> Tags,
         Map<ConceptId, Concept> Concepts,
         Map<ConceptId, LinkObject> Links,
-        Map<ConceptId, List<ConceptId>> Owners
+        Map<ConceptId, Lst<ConceptId>> Owners
     );
 
     delegate Task<ChangeLogs> TransactionTask(State state);
@@ -144,5 +151,11 @@ public sealed class KmsServer : IKmsServer
             return (new(changes), new(concepts.HeadOrNone()));
         };
 
+        public static TransactionResult<Concept> CreateSubConcept(IKmsDatabaseSession session, ConceptId owner, string name) => async _ => {
+            var newConcept = await session.CreateSubConcept(owner, name);
+            var changes = Seq(ModelChange.NewConceptChange(ModelOperationType.Add(newConcept)),
+                              ModelChange.NewOwnerChange(ModelOperationType.Add((newConcept.Id, List(owner)))));
+            return (new(changes), new(newConcept));
+        };
     }
 }

@@ -7,9 +7,7 @@
 <MudMainContent>
     <div class="ma-3 pa-3">
         <LoadingSection Value="ViewModel?.CurrentConcept">
-            <View>
-                <h1>@context.Name</h1>
-            </View>
+            <View><ConceptDetails Concept="@context" /></View>
         </LoadingSection>
     </div>
 </MudMainContent>

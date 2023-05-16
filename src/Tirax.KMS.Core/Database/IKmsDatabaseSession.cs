@@ -9,6 +9,8 @@ public interface IKmsDatabase
 
 public interface IKmsDatabaseSession : IAsyncDisposable
 {
+    Task<Concept> CreateSubConcept(ConceptId owner, string name);
+    
     Task<Seq<Concept>> FetchConcept(ConceptId conceptId);
     Task<Seq<ConceptTag>> GetTags();
     Task<Concept> GetHome();

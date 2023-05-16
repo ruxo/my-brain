@@ -1,0 +1,48 @@
+﻿@using Tirax.KMS.Domain
+@inherits ReactiveComponentBase<ConceptDetails.VModel>
+
+<MudStack Row="true">
+    <MudText Typo="Typo.h4">@ViewModel!.Name</MudText>
+    <MudForm>
+        <MudTextField T="string" Label="Rename topic" Disabled="true" Required="true"></MudTextField>
+    </MudForm>
+    <MudIconButton Icon="@Icons.Material.Filled.Edit" Disabled="true" />
+</MudStack>
+<MudStack Row="true" Spacing="2">
+    <MudFab StartIcon="@ViewModel!.EditButtonIcon" Color="@ViewModel.EditButtonColor" 
+            Disabled="@ViewModel.IsSaving" OnClick="ShowDialog" />
+    <MudFab StartIcon="@Icons.Material.Filled.Bookmark" Disabled="true" Label="Bookmark" />
+    <MudFab StartIcon="@Icons.Material.Filled.Edit" Color="Color.Secondary" Disabled="true" />
+</MudStack>
+<MudDivider />
+
+<LoadingSection Value="ViewModel!.SubConcepts">
+    <View Context="conceptList">
+        @if (conceptList.Count > 0) {
+            <MudText Typo="Typo.h4">Contains</MudText>
+            <MudTreeView Items="@conceptList">
+                <ItemTemplate Context="item">
+                    @switch (item.Concept) {
+                        case Observation<Concept>.Data(Value: var concept):
+                            <MudTreeViewItem Text="@concept.Name" Items="@item.SubConcepts"/>
+                            break;
+                        case Observation<Concept>.Failed(Error: var error):
+                            <MudTreeViewItem T="string" Color="Color.Error" Text="@error.Message"/>
+                            break;
+                        default:
+                            throw new NotSupportedException();
+                    }
+                </ItemTemplate>
+            </MudTreeView>
+        }
+    </View>
+</LoadingSection>
+
+<MudPaper>
+    <MudText Typo="Typo.h4">References</MudText>
+</MudPaper>
+
+<MudPaper Class="pa-3 ma-2" Height="50em" Width="50em" Elevation="2" Outlined="true">
+    <MudText Typo="Typo.h4">Note</MudText>
+    <MudText>@ViewModel!.Name</MudText>
+</MudPaper>

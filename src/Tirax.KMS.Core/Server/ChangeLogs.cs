@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using Tirax.KMS.Domain;
+﻿using Tirax.KMS.Domain;
 // ReSharper disable InconsistentNaming
 
 namespace Tirax.KMS.Server;
@@ -50,16 +49,12 @@ public abstract record ModelChange
 {
     public sealed record Tag(ModelOperationType<ConceptTag> Value) : ModelChange;
     public sealed record ConceptChange(ModelOperationType<Concept> Concept) : ModelChange;
-    public sealed record OwnerChange(ModelOperationType<(ConceptId ConceptId, List<ConceptId> Owners)> Owner) : ModelChange;
+    public sealed record OwnerChange(ModelOperationType<(ConceptId ConceptId, Lst<ConceptId> Owners)> Owner) : ModelChange;
     public sealed record LinkObjectChange(ModelOperationType<LinkObject> Link) : ModelChange;
     
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ModelChange NewTag(ModelOperationType<ConceptTag> Value) => new Tag(Value);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ModelChange NewConceptChange(ModelOperationType<Concept> Concept) => new ConceptChange(Concept);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ModelChange NewOwnerChange(ModelOperationType<(ConceptId ConceptId, List<ConceptId> Owners)> Owner) => new OwnerChange(Owner);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ModelChange NewOwnerChange(ModelOperationType<(ConceptId ConceptId, Lst<ConceptId> Owners)> Owner) => new OwnerChange(Owner);
     public static ModelChange NewLinkObjectChange(ModelOperationType<LinkObject> Link) => new LinkObjectChange(Link);
 }
 
