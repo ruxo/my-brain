@@ -1,6 +1,7 @@
 ﻿@using Tirax.KMS.Server
 @inherits ReactiveComponentBase<AppModel.ViewModel>
 @inject IKmsServer Server
+@inject AppModel.ViewModel AppModel
 
 <MudAppBar Elevation="1">
     <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
@@ -19,6 +20,11 @@
 </MudAppBar>
 
 @code {
+
+    protected override void OnInitialized() {
+        ViewModel = AppModel;
+    }
+    
     async Task<IEnumerable<Domain.Concept>> Search(string s, CancellationToken ct) =>
         string.IsNullOrWhiteSpace(s)
             ? Enumerable.Empty<Domain.Concept>()

@@ -20,14 +20,15 @@
     <View Context="conceptList">
         @if (conceptList.Count > 0) {
             <MudText Typo="Typo.h4">Contains</MudText>
-            <MudTreeView Items="@conceptList">
+            <MudTreeView Items="@conceptList" Hover="true" Dense="true" T="VModel.ConceptListItem"
+                         SelectedValueChanged="SelectConcept">
                 <ItemTemplate Context="item">
                     @switch (item.Concept) {
                         case Observation<Concept>.Data(Value: var concept):
-                            <MudTreeViewItem Text="@concept.Name" Items="@item.SubConcepts"/>
+                            <MudTreeViewItem Text="@concept.Name" Items="@item.SubConcepts" Value="item" />
                             break;
                         case Observation<Concept>.Failed(Error: var error):
-                            <MudTreeViewItem T="string" Color="Color.Error" Text="@error.Message"/>
+                            <MudTreeViewItem Color="Color.Error" Text="@error.Message" Value="item" />
                             break;
                         default:
                             throw new NotSupportedException();

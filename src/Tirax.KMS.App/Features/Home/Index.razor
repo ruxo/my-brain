@@ -1,13 +1,13 @@
 ﻿@page "/"
-@inherits ReactiveComponentBase<AppModel.ViewModel>
+@inject NavigationManager NavManager
+@inject AppModel.ViewModel VM
+    
+Loading...
 
-<TopBar ViewModel="ViewModel" />
-<Drawer ViewModel="ViewModel" />
+@code {
 
-<MudMainContent>
-    <div class="ma-3 pa-3">
-        <LoadingSection Value="ViewModel?.CurrentConcept">
-            <View><ConceptDetails Concept="@context" /></View>
-        </LoadingSection>
-    </div>
-</MudMainContent>
+    protected override void OnInitialized() {
+        NavManager.NavigateTo($"/topic/{VM.CurrentTopic}");
+    }
+
+}

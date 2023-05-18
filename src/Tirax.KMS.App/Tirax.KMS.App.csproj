@@ -12,10 +12,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Features\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Tirax.KMS.Core\Tirax.KMS.Core.csproj" />
   </ItemGroup>
 

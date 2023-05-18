@@ -1,4 +1,5 @@
 ﻿@inherits ReactiveComponentBase<AppModel.ViewModel>
+@inject AppModel.ViewModel AppModel
 
 <MudDrawer ClipMode="DrawerClipMode.Always" Elevation="2" Open="ViewModel?.DrawerIsOpen ?? false">
     <MudNavMenu>
@@ -6,3 +7,11 @@
         <MudNavGroup Title="Favorites" />
     </MudNavMenu> 
 </MudDrawer>
+
+@code {
+
+    protected override void OnInitialized() {
+        ViewModel = AppModel;
+    }
+
+}

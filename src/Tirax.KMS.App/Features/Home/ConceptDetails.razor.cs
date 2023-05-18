@@ -30,9 +30,17 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
     [Parameter]
     public Concept? Concept { get; set; }
 
+    [Parameter]
+    public Action<ConceptId>? OnConceptSelected { get; set; }
+
     protected override void OnParametersSet() {
         ViewModel!.Concept = Concept;
         base.OnParametersSet();
+    }
+
+    void SelectConcept(VModel.ConceptListItem item) {
+        if (OnConceptSelected is not null && item.Concept is Observation<Concept>.Data{ Value: var concept })
+            OnConceptSelected(concept.Id);
     }
 
     async Task ShowDialog() {

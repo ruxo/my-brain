@@ -14,14 +14,17 @@ public static class AppModel
     {
         ConceptId currentTopic;
 
+        readonly ObservableAsPropertyHelper<Concept> home;
         readonly ObservableAsPropertyHelper<Observation<Concept>> currentConcept;
         readonly ObservableAsPropertyHelper<Lst<Concept>> history;
 
         bool currentDrawerIsOpen;
         readonly ObservableAsPropertyHelper<bool> drawerIsOpen;
 
-        public ViewModel(ConceptId home, IKmsServer server) {
-            currentTopic = home;
+        public ViewModel(ConceptId initialId, IKmsServer server) {
+            currentTopic = initialId;
+            
+            home = Observable.FromAsync(async () => await server.GetHome()).ToProperty(this, my => my.Home);
             
             async Task<Concept> fetch(string id) => (await server.Fetch(id)).Get();
             currentConcept = this.WhenAnyValue(my => my.CurrentTopic)
@@ -38,7 +41,10 @@ public static class AppModel
                                 })
                           .ToProperty(this, my => my.History);
 
-            GoHome = ReactiveCommand.Create(() => CurrentTopic = home);
+            GoHome = ReactiveCommand.Create(() => {
+                CurrentTopic = Home.Id;
+                return Home.Id;
+            });
             
             ToggleDrawerOpen = ReactiveCommand.Create(() => currentDrawerIsOpen = !currentDrawerIsOpen);
             drawerIsOpen = ToggleDrawerOpen.ToProperty(this, my => my.DrawerIsOpen);
@@ -49,6 +55,7 @@ public static class AppModel
             set => this.RaiseAndSetIfChanged(ref currentTopic, value);
         }
 
+        public Concept Home => home.Value;
         public Observation<Concept> CurrentConcept => currentConcept.Value;
         public Lst<Concept> History => history.Value;
         
