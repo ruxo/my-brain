@@ -41,6 +41,7 @@ public static class AppModel
                                 })
                           .ToProperty(this, my => my.History);
 
+            Go = ReactiveCommand.Create<ConceptId>(cid => CurrentTopic = cid);
             GoHome = ReactiveCommand.Create(() => {
                 CurrentTopic = Home.Id;
                 return Home.Id;
@@ -59,6 +60,7 @@ public static class AppModel
         public Observation<Concept> CurrentConcept => currentConcept.Value;
         public Lst<Concept> History => history.Value;
         
+        public ReactiveCommand<ConceptId, Unit> Go { get; }
         public ReactiveCommand<Unit, ConceptId> GoHome { get; }
 
         public bool DrawerIsOpen => drawerIsOpen.Value;

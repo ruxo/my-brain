@@ -12,8 +12,6 @@ public partial class Topic
     public Topic() {
         this.WhenActivated(_ => {
             ViewModel = new(AppModel);
-
-            AppModel.CurrentTopic = TopicId;
         });
     }
 
@@ -26,6 +24,11 @@ public partial class Topic
     [Inject]
     public IKmsServer Server { get; set; } = null!;
 
+    protected override void OnParametersSet() {
+        AppModel.CurrentTopic = TopicId;
+        base.OnParametersSet();
+    }
+
     void OnConceptSelected(ConceptId id) {
         AppModel.CurrentTopic = id;
     }
@@ -36,7 +39,7 @@ public partial class Topic
 
         public VModel(AppModel.ViewModel vm) {
             breadcrumbs = vm.WhenAnyValue(x => x.History)
-                            .Select(list => new List<BreadcrumbItem>(list.Map(c => new BreadcrumbItem(c.Name, $"/topic/{c.Id}"))))
+                            .Select(list => new List<BreadcrumbItem>(list.Map(c => new BreadcrumbItem(c.Name, $"/topic/{c.Id}", c.Id == vm.CurrentTopic))))
                             .ToProperty(this, my => my.Breadcrumbs);
         }
 

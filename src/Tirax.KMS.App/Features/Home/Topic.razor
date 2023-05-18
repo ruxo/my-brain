@@ -1,7 +1,7 @@
 ﻿@page "/topic/{TopicId}"
 @inherits ReactiveComponentBase<Topic.VModel>
 
-<MudBreadcrumbs Separator="⪧" Items="ViewModel!.Breadcrumbs"></MudBreadcrumbs>
+<MudBreadcrumbs Separator="⪧" Items="ViewModel!.Breadcrumbs" /> 
 <div class="ma-3 pa-3">
     <LoadingSection Value="AppModel.CurrentConcept">
         <View><ConceptDetails Concept="@context" OnConceptSelected="OnConceptSelected"/></View>
