@@ -3,7 +3,7 @@
 
 <MudBreadcrumbs Separator="⪧" Items="ViewModel!.Breadcrumbs">
     <ItemTemplate Context="item">
-        <MudLink Color="Color.Primary" Disabled="item.Disabled" OnClick="() => OnConceptSelected(item.Href)">
+        <MudLink Color="Color.Secondary" Disabled="item.Disabled" OnClick="() => OnConceptSelected(item.Href)">
             @item.Text
         </MudLink>
     </ItemTemplate>

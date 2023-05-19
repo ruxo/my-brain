@@ -63,6 +63,7 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
         readonly ObservableAsPropertyHelper<string> editButtonIcon;
         readonly ObservableAsPropertyHelper<Color> editButtonColor;
         readonly ObservableAsPropertyHelper<Observation<System.Collections.Generic.HashSet<ConceptListItem>>> subConcepts;
+        readonly ObservableAsPropertyHelper<List<BreadcrumbItem>> ownerBreadcrumbs;
 
         public readonly record struct ConceptListItem(Observation<Concept> Concept, System.Collections.Generic.HashSet<ConceptListItem> SubConcepts);
 
@@ -75,6 +76,11 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
                               .Select(_concept => _concept.Map(c => c.Contains).IfNone(LanguageExt.HashSet.empty<ConceptId>()))
                               .SelectMany(cids => Observation.From(() => LoadSubConcepts(cids.ToSeq())))
                               .ToProperty(this, x => x.SubConcepts);
+            ownerBreadcrumbs = this.WhenAnyValue(my => my.Concept)
+                                   .Where(c => c.IsSome)
+                                   .SelectMany(async c => await server.GetOwners(c.Get().Id))
+                                   .Select(owners => new List<BreadcrumbItem>(owners.Map(c => new BreadcrumbItem(c.Name, c.Id))))
+                                   .ToProperty(this, my => my.OwnerBreadcrumbs, new List<BreadcrumbItem>());
             editButtonIcon = this.WhenAnyValue(x => x.isSaving)
                                  .Select(saving => saving ? Icons.Material.Filled.Savings : Icons.Material.Filled.Add)
                                  .ToProperty(this, x => x.EditButtonIcon);
@@ -93,6 +99,8 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
         public string Name => name.Value;
 
         public Observation<System.Collections.Generic.HashSet<ConceptListItem>> SubConcepts => subConcepts.Value;
+
+        public List<BreadcrumbItem> OwnerBreadcrumbs => ownerBreadcrumbs.Value;
         
         public ReactiveCommand<string,Concept> NewConcept { get; }
 

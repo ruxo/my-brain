@@ -16,6 +16,8 @@ public interface IKmsServer : IDisposable
     ValueTask<Seq<Concept>> Search(string keyword, CancellationToken cancellationToken);
 
     ValueTask<Concept> CreateSubConcept(ConceptId owner, string name);
+
+    ValueTask<Seq<Concept>> GetOwners(ConceptId id);
 }
 
 public sealed class KmsServer : IKmsServer
@@ -38,7 +40,7 @@ public sealed class KmsServer : IKmsServer
                              tags.Map(t => (t.Id, t)).ToMap(),
                              Map.empty<ConceptId, Concept>().Add(home.Id, home),
                              Map.empty<ConceptId, LinkObject>(),
-                             Map.empty<ConceptId, Lst<ConceptId>>());
+                             Map.empty<ConceptId, Seq<ConceptId>>());
         });
 
         Task.Factory.StartNew(InboxProcessor, TaskCreationOptions.LongRunning | TaskCreationOptions.AttachedToParent);
@@ -74,6 +76,30 @@ public sealed class KmsServer : IKmsServer
     public async ValueTask<Concept> CreateSubConcept(ConceptId owner, string name) {
         await using var session = db.Session();
         return await Transact(Operations.CreateSubConcept(session, owner, name));
+    }
+
+    public async ValueTask<Seq<Concept>> GetOwners(ConceptId id) {
+        var state = await snapshot;
+        var owners = state.Owners.Find(id).IfSome(out var result) ? result.ToSeq() : await findOwners();
+        return await FetchUnsafe(owners);
+
+        async Task<Seq<ConceptId>> findOwners() {
+            await using var session = db.Session();
+            return await Transact(Operations.FindOwners(session, id));
+        }
+    }
+
+    async ValueTask<Seq<Concept>> FetchUnsafe(Seq<ConceptId> ids) {
+        var state = await snapshot;
+        var (existing, needFetching) = ids.Partition(state.Concepts.ContainsKey, cid => state.Concepts[cid], identity);
+        if (needFetching.Any()) {
+            await using var session = db.Session();
+            var fetched = await Task.WhenAll(needFetching.Map(cid => Transact(Operations.Fetch(session, cid))));
+            if (fetched.Any(c => c.IsNone)) throw new ArgumentOutOfRangeException($"Some ids are invalid: {ids}");
+            return Seq(fetched).Choose(identity).Append(existing.ToSeq());
+        }
+        else
+            return existing.ToSeq();
     }
 
     #region Transaction methods
@@ -134,7 +160,7 @@ public sealed class KmsServer : IKmsServer
         Map<ConceptId, ConceptTag> Tags,
         Map<ConceptId, Concept> Concepts,
         Map<ConceptId, LinkObject> Links,
-        Map<ConceptId, Lst<ConceptId>> Owners
+        Map<ConceptId, Seq<ConceptId>> Owners
     );
 
     delegate Task<ChangeLogs> TransactionTask(State state);
@@ -151,10 +177,18 @@ public sealed class KmsServer : IKmsServer
             return (new(changes), new(concepts.HeadOrNone()));
         };
 
+        public static TransactionResult<Seq<ConceptId>> FindOwners(IKmsDatabaseSession session, ConceptId cid) => async state => {
+            if (state.Owners.Find(cid).IfSome(out var existing))
+                return (new(), new(existing));
+            var ownerIds = await session.FetchOwners(cid);
+            var changes = ModelChange.NewOwnerChange(ModelOperationType.Add((cid, ownerIds)));
+            return (new(Seq1(changes)), new(ownerIds));
+        };
+
         public static TransactionResult<Concept> CreateSubConcept(IKmsDatabaseSession session, ConceptId owner, string name) => async _ => {
             var newConcept = await session.CreateSubConcept(owner, name);
             var changes = Seq(ModelChange.NewConceptChange(ModelOperationType.Add(newConcept)),
-                              ModelChange.NewOwnerChange(ModelOperationType.Add((newConcept.Id, List(owner)))));
+                              ModelChange.NewOwnerChange(ModelOperationType.Add((newConcept.Id, Seq1(owner)))));
             return (new(changes), new(newConcept));
         };
     }

@@ -111,6 +111,15 @@ RETURN concept, [(concept)-[:CONTAINS]->(sub)|elementId(sub)] AS contains, [(con
         return result.Single();
     }
 
+    public Task<Seq<ConceptId>> FetchOwners(ConceptId conceptId) {
+        const string q = """
+MATCH (owner:Concept)-[:CONTAINS]->(concept:Concept)
+WHERE elementId(concept) = $cid
+RETURN elementId(owner) AS id
+""";
+        return Query(q, rec => new ConceptId(rec["id"].As<string>()), new{ cid = conceptId.Value });
+    }
+
     Task<Seq<T>> Query<T>(string query, Func<IRecord, T> mapper, object? parameters = null) =>
         Query(session, query, mapper, parameters);
 

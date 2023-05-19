@@ -16,6 +16,7 @@ public static class AppModel
 
         readonly ObservableAsPropertyHelper<Concept> home;
         readonly ObservableAsPropertyHelper<Observation<Concept>> currentConcept;
+        readonly ObservableAsPropertyHelper<Seq<Concept>> owners;
         readonly ObservableAsPropertyHelper<Lst<Concept>> history;
 
         bool currentDrawerIsOpen;
@@ -31,6 +32,9 @@ public static class AppModel
                                  .SelectMany(topic => Observation.From(() => fetch(topic)))
                                  .ToProperty(this, my => my.CurrentConcept);
 
+            owners = this.WhenAnyValue(my => my.CurrentTopic)
+                         .SelectMany(async cid => await server.GetOwners(cid))
+                         .ToProperty(this, my => my.Owners);
             history = this.WhenAnyValue(my => my.CurrentConcept)
                           .Scan(Lst<Concept>.Empty,
                                 (last, cid) => cid switch{
@@ -58,6 +62,7 @@ public static class AppModel
 
         public Concept Home => home.Value;
         public Observation<Concept> CurrentConcept => currentConcept.Value;
+        public Seq<Concept> Owners => owners.Value;
         public Lst<Concept> History => history.Value;
         
         public ReactiveCommand<ConceptId, Unit> Go { get; }

@@ -1,6 +1,19 @@
 ﻿@using Tirax.KMS.Domain
 @inherits ReactiveComponentBase<ConceptDetails.VModel>
 
+@if (ViewModel!.OwnerBreadcrumbs.Any()) {
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudText Typo="Typo.subtitle2">Owners:</MudText>
+    <MudBreadcrumbs Separator="|" Style="padding: 0" Items="ViewModel!.OwnerBreadcrumbs">
+        <ItemTemplate Context="item">
+            <MudLink Color="Color.Primary" Disabled="item.Disabled" OnClick="() => NotifyConceptSelected(item.Href)">
+                @item.Text
+            </MudLink>
+        </ItemTemplate>
+    </MudBreadcrumbs>
+</MudStack>
+}
+
 <MudStack Row="true">
     <MudText Typo="Typo.h4">@ViewModel!.Name</MudText>
     <MudForm>

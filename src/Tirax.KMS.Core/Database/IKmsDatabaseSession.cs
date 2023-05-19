@@ -14,4 +14,5 @@ public interface IKmsDatabaseSession : IAsyncDisposable
     Task<Seq<Concept>> FetchConcept(ConceptId conceptId);
     Task<Seq<ConceptTag>> GetTags();
     Task<Concept> GetHome();
+    Task<Seq<ConceptId>> FetchOwners(ConceptId conceptId);
 }
