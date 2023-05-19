@@ -16,7 +16,7 @@ namespace Tirax.KMS.App.Features.Home;
 public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VModel>
 {
     public ConceptDetails() {
-        this.WhenActivated(disposables => {
+        this.WhenActivated(_ => {
             ViewModel = new(Server);
         });
     }
@@ -31,23 +31,27 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
     public Concept? Concept { get; set; }
 
     [Parameter]
-    public Action<ConceptId>? OnConceptSelected { get; set; }
+    public EventCallback<ConceptId> OnConceptSelected { get; set; }
 
     protected override void OnParametersSet() {
         ViewModel!.Concept = Concept;
         base.OnParametersSet();
     }
 
-    void SelectConcept(VModel.ConceptListItem item) {
-        if (OnConceptSelected is not null && item.Concept is Observation<Concept>.Data{ Value: var concept })
-            OnConceptSelected(concept.Id);
+    async Task SelectConcept(VModel.ConceptListItem item) {
+        if (item.Concept is Observation<Concept>.Data{ Value: var concept })
+            await NotifyConceptSelected(concept.Id);
     }
 
     async Task ShowDialog() {
         var result = await AddDialog.Show(DialogService);
-        if (result.IfSome(out var name))
-            await ViewModel!.NewConcept.Execute(name).ToTask();
+        if (result.IfSome(out var name)) {
+            var concept = await ViewModel!.NewConcept.Execute(name).ToTask();
+            await NotifyConceptSelected(concept.Id);
+        }
     }
+
+    Task NotifyConceptSelected(ConceptId cid) => OnConceptSelected.InvokeAsync(cid);
 
     public sealed class VModel : ReactiveObject
     {
@@ -78,7 +82,7 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
                                   .Select(saving => saving ? Color.Dark : Color.Primary)
                                   .ToProperty(this, x => x.EditButtonColor);
             
-            NewConcept = ReactiveCommand.CreateFromTask<string>(NewConceptTask);
+            NewConcept = ReactiveCommand.CreateFromTask<string,Concept>(NewConceptTask);
         }
 
         public Option<Concept> Concept {
@@ -90,7 +94,7 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
 
         public Observation<System.Collections.Generic.HashSet<ConceptListItem>> SubConcepts => subConcepts.Value;
         
-        public ReactiveCommand<string,Unit> NewConcept { get; }
+        public ReactiveCommand<string,Concept> NewConcept { get; }
 
         public bool IsSaving {
             get => isSaving;
@@ -100,11 +104,10 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
         public string EditButtonIcon => editButtonIcon.Value;
         public Color EditButtonColor => editButtonColor.Value;
 
-        async Task NewConceptTask(string conceptName) {
+        async Task<Concept> NewConceptTask(string conceptName) {
             IsSaving = true;
             try {
-                var newConcept = await server.CreateSubConcept(concept.Get().Id, conceptName);
-                Concept = newConcept;
+                return await server.CreateSubConcept(concept.Get().Id, conceptName);
             }
             finally {
                 IsSaving = false;

@@ -1,4 +1,5 @@
 ﻿using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 using ReactiveUI;
@@ -29,9 +30,7 @@ public partial class Topic
         base.OnParametersSet();
     }
 
-    void OnConceptSelected(ConceptId id) {
-        AppModel.CurrentTopic = id;
-    }
+    Task OnConceptSelected(ConceptId id) => AppModel.Go.Execute(id).ToTask();
 
     public sealed class VModel : ReactiveObject
     {
@@ -39,7 +38,7 @@ public partial class Topic
 
         public VModel(AppModel.ViewModel vm) {
             breadcrumbs = vm.WhenAnyValue(x => x.History)
-                            .Select(list => new List<BreadcrumbItem>(list.Map(c => new BreadcrumbItem(c.Name, $"/topic/{c.Id}", c.Id == vm.CurrentTopic))))
+                            .Select(list => new List<BreadcrumbItem>(list.Map(c => new BreadcrumbItem(c.Name, c.Id, c.Id == vm.CurrentTopic))))
                             .ToProperty(this, my => my.Breadcrumbs);
         }
 

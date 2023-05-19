@@ -1,9 +1,15 @@
 ﻿@page "/topic/{TopicId}"
 @inherits ReactiveComponentBase<Topic.VModel>
 
-<MudBreadcrumbs Separator="⪧" Items="ViewModel!.Breadcrumbs" /> 
+<MudBreadcrumbs Separator="⪧" Items="ViewModel!.Breadcrumbs">
+    <ItemTemplate Context="item">
+        <MudLink Color="Color.Primary" Disabled="item.Disabled" OnClick="() => OnConceptSelected(item.Href)">
+            @item.Text
+        </MudLink>
+    </ItemTemplate>
+</MudBreadcrumbs>
 <div class="ma-3 pa-3">
     <LoadingSection Value="AppModel.CurrentConcept">
-        <View><ConceptDetails Concept="@context" OnConceptSelected="OnConceptSelected"/></View>
+        <View><ConceptDetails Concept="context" OnConceptSelected="OnConceptSelected"/></View>
     </LoadingSection>
 </div>

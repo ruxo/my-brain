@@ -25,7 +25,7 @@
                 <ItemTemplate Context="item">
                     @switch (item.Concept) {
                         case Observation<Concept>.Data(Value: var concept):
-                            <MudTreeViewItem Text="@concept.Name" Items="@item.SubConcepts" Value="item" />
+                            <MudTreeViewItem Text="@concept.Name" Items="@item.SubConcepts" Value="item" Expanded="true" />
                             break;
                         case Observation<Concept>.Failed(Error: var error):
                             <MudTreeViewItem Color="Color.Error" Text="@error.Message" Value="item" />
