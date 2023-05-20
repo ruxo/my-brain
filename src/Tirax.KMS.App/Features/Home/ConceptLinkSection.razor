@@ -1,0 +1,13 @@
+﻿@using MudBlazor.Extensions
+@inherits ReactiveComponentBase<ConceptLinkSection.VModel>
+
+<MudStack Row="true" AlignItems="AlignItems.Baseline">
+    <MudText Typo="Typo.h6">References</MudText>
+    <MudIconButton Icon="@Icons.Material.Rounded.Add" Color="Color.Primary" Disabled="Disabled" 
+                   OnClick="ShowAddLink" />
+</MudStack>
+<MudItem xs="12" md="12">
+    @foreach (var link in ViewModel!.Links) {
+        <MudLink Href="@link.Uri.Value" Target="_blank">@link.Name.IfNone(link.Uri.Value)</MudLink>
+    }
+</MudItem>

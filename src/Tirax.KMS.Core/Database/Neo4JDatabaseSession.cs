@@ -5,6 +5,7 @@ using Neo4j.Driver;
 using Tirax.KMS.Domain;
 using Tirax.KMS.Extensions;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
+using Seq = LanguageExt.Seq;
 
 namespace Tirax.KMS.Database;
 
@@ -47,15 +48,25 @@ static class Materialization
 
     public static Concept ToConcept(this IRecord record) {
         var node = record["concept"].As<INode>();
-        var contains = record["contains"].As<IEnumerable<object>>().ToSeq().Map(o => new ConceptId(o.As<string>()));
-        var tags = record["tags"].As<IEnumerable<object>>().ToSeq().Map(o => new ConceptId(o.As<string>()));
+        var contains = record.ReadConceptIdList("contains");
+        var links = record.ReadConceptIdList("links");
+        var tags = record.ReadConceptIdList("tags");
         
         Debug.Assert(node.Labels.Single() == NodeLabels.Concept);
         return new(node.ElementId, node["name"].As<string>()){
             Contains = toHashSet(contains),
+            Links = toHashSet(links),
             Tags = toHashSet(tags)
         };
     }
+
+    public static LinkObject ToLinkObject(this IRecord record) {
+        var node = record["link"].As<INode>();
+        return new(node.ElementId, Optional(node["name"].As<string>()), new(node["uri"].As<string>()));
+    }
+
+    static Seq<ConceptId> ReadConceptIdList(this IRecord record, string fieldName) =>
+        record[fieldName].As<IEnumerable<object>>().ToSeq().Map(o => new ConceptId(o.As<string>()));
 }
 
 public sealed class Neo4JDatabaseSession : IKmsDatabaseSession
@@ -79,35 +90,54 @@ public sealed class Neo4JDatabaseSession : IKmsDatabaseSession
 
     #endregion
 
+    const string ConceptReturn = "RETURN concept, [(concept)-[:CONTAINS]->(sub)|elementId(sub)] AS contains," +
+                                 "[(concept)-[:REFERS]->(link)|elementId(link)] AS links," +
+                                 "[(concept)-[:TAG]->(tag)|elementId(tag)] AS tags";
+
+    public async Task<LinkObject> CreateLink(ConceptId ownerId, Option<string> name, URI uri) {
+        const string q = """
+MATCH (owner:Concept)
+WHERE elementId(owner) = $oid
+CREATE (link:LinkObject { name: $name, uri: $uri }), (owner)-[:REFERS]->(link)
+RETURN link
+""";
+        var result = await Query(q, Materialization.ToLinkObject, new{ oid = ownerId.Value, name = name.GetOrDefault(), uri = uri.Value });
+        return result.Single();
+    }
+
     public Task<Concept> CreateSubConcept(ConceptId owner, string name) =>
         session.ExecuteWriteAsync(async tx => {
             const string q = """
 MATCH (owner:Concept)
 WHERE elementId(owner) = $oid
 CREATE (concept:Concept { name: $name }), (owner)-[:CONTAINS]->(concept)
-RETURN concept, [] AS contains, [] AS tags
+RETURN concept, [] AS contains, [] AS links, [] AS tags
 """;
             var newConcept = await Query(tx, q, Materialization.ToConcept, new{oid=owner.Value, name});
             return newConcept.First();
         });
 
-    public Task<Seq<Concept>> FetchConcept(ConceptId conceptId) {
-        const string q = """
-MATCH (concept:Concept)
-WHERE elementId(concept) = $cid
-RETURN concept, [(concept)-[:CONTAINS]->(sub)|elementId(sub)] AS contains, [(concept)-[:TAG]->(tag)|elementId(tag)] AS tags
-""";
-        return Query(q, Materialization.ToConcept, new{ cid = conceptId.Value });
+    public async Task<Option<Concept>> FetchConcept(ConceptId conceptId) {
+        const string q = "MATCH (concept:Concept) WHERE elementId(concept) = $cid " + ConceptReturn;
+        var result = await Query(q, Materialization.ToConcept, new{ cid = conceptId.Value });
+        return result.TrySingle();
     }
+
+    public Task<(Seq<Concept> Result, Seq<ConceptId> Invalids)> FetchConcepts(Seq<ConceptId> conceptIds) => 
+        Fetch("MATCH (concept:Concept) WHERE elementId(concept) IN $ids " + ConceptReturn,
+              Materialization.ToConcept,
+              conceptIds);
+
+    public Task<(Seq<LinkObject> Result, Seq<ConceptId> Invalids)> FetchLinkObjects(Seq<ConceptId> linkIds) => 
+        Fetch("MATCH (link:LinkObject) WHERE elementId(link) IN $ids RETURN link",
+              Materialization.ToLinkObject,
+              linkIds);
 
     public Task<Seq<ConceptTag>> GetTags() =>
         Query("MATCH (tag:Tag) RETURN tag", Materialization.ToConceptTag);
     
     public async Task<Concept> GetHome() {
-        const string q = """
-MATCH (t:Bookmark { label: 'home' })-[:POINT]->(concept:Concept)
-RETURN concept, [(concept)-[:CONTAINS]->(sub)|elementId(sub)] AS contains, [(concept)-[:TAG]->(tag)|elementId(tag)] AS tags
-""";
+        const string q = "MATCH (t:Bookmark { label: 'home' })-[:POINT]->(concept:Concept) " + ConceptReturn;
         var result = await Query(q, Materialization.ToConcept);
         return result.Single();
     }
@@ -129,11 +159,19 @@ RETURN elementId(owner) AS id
             sb.AppendLine("SET concept.name = $name");
 
         if (sb.Length > 0) {
-            sb.Insert(0, "MATCH (concept:Concept)\nWHERE elementId(concept) = $cid\n");
+            sb.Insert(0, "MATCH (concept:Concept) WHERE elementId(concept) = $cid ");
 
             await session.RunAsync(sb.ToString(), new{ cid = @new.Id.Value, name = @new.Name });
         }
         return @new;
+    }
+
+    async Task<(Seq<T> Result, Seq<ConceptId> Invalids)> Fetch<T>(string q, Func<IRecord, T> mapper, Seq<ConceptId> ids) where T : IDomainObject {
+        if (ids.IsEmpty)
+            return (Seq.empty<T>(), ids);
+        var result = await Query(q, mapper, new{ ids = ids.Map(lid => lid.Value).ToArray() });
+        var invalids = ids.Except(result.Map(x => x.Id)).ToSeq();
+        return (result, invalids);
     }
 
     Task<Seq<T>> Query<T>(string query, Func<IRecord, T> mapper, object? parameters = null) =>

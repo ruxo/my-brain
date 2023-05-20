@@ -14,7 +14,7 @@
 </MudStack>
 }
 
-<MudStack Row="true">
+<MudStack Row="true" AlignItems="AlignItems.Baseline">
     @if (ViewModel!.IsNameEditing) {
         <MudForm>
             <MudTextField T="string" Label="Rename topic" Required="true" Disabled="ViewModel!.IsSaving"
@@ -27,22 +27,20 @@
                        OnClick="() => ViewModel!.CancelEditName.Execute().ToTask()"/>
     }
     else {
-        <MudText Typo="Typo.h4">@ViewModel!.Name</MudText>
+        <MudText Typo="Typo.h3">@ViewModel!.Name</MudText>
         <MudIconButton Icon="@Icons.Material.Filled.Edit" OnClick="() => ViewModel!.BeginEditName.Execute().ToTask()"/>
     }
-</MudStack>
-<MudStack Row="true" Spacing="2">
-    <MudFab StartIcon="@ViewModel!.AddConceptButtonIcon" Color="@ViewModel.AddConceptButtonColor" 
-            Disabled="@ViewModel.IsSaving" OnClick="ShowDialog" />
+    
+    <MudIconButton Icon="@ViewModel!.AddConceptButtonIcon" Color="@ViewModel.AddConceptButtonColor" 
+                   Disabled="@ViewModel.IsSaving" OnClick="ShowDialog" />
     <MudFab StartIcon="@Icons.Material.Filled.Bookmark" Disabled="true" Label="Bookmark" />
-    <MudFab StartIcon="@Icons.Material.Filled.Edit" Color="Color.Secondary" Disabled="true" />
 </MudStack>
 <MudDivider />
 
 <LoadingSection Value="ViewModel!.SubConcepts">
     <View Context="conceptList">
         @if (conceptList.Count > 0) {
-            <MudText Typo="Typo.h4">Contains</MudText>
+            <MudText Typo="Typo.h6">Contains</MudText>
             <MudTreeView Items="@conceptList" Hover="true" Dense="true" T="VModel.ConceptListItem"
                          SelectedValueChanged="SelectConcept">
                 <ItemTemplate Context="item">
@@ -62,9 +60,7 @@
     </View>
 </LoadingSection>
 
-<MudPaper>
-    <MudText Typo="Typo.h4">References</MudText>
-</MudPaper>
+<ConceptLinkSection Concept="ViewModel.Concept" Disabled="ViewModel.IsSaving" OnConceptUpdated="ConceptUpdated" />
 
 <MudPaper Class="pa-3 ma-2" Height="50em" Width="50em" Elevation="2" Outlined="true">
     <MudText Typo="Typo.h4">Note</MudText>

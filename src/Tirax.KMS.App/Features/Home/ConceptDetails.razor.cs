@@ -9,6 +9,7 @@ using ReactiveUI.Blazor;
 using Tirax.KMS.Domain;
 using Tirax.KMS.Extensions;
 using Tirax.KMS.Server;
+using Tirax.KMS.App.Extensions;
 using Seq = LanguageExt.Seq;
 using Unit = System.Reactive.Unit;
 
@@ -39,13 +40,17 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
         base.OnParametersSet();
     }
 
+    void ConceptUpdated(Concept updated) {
+        ViewModel!.Concept = updated;
+    }
+
     async Task SelectConcept(VModel.ConceptListItem item) {
         if (item.Concept is Observation<Concept>.Data{ Value: var concept })
             await NotifyConceptSelected(concept.Id);
     }
 
     async Task ShowDialog() {
-        var result = await AddDialog.Show(DialogService);
+        var result = await DialogService.ShowDialog<AddDialog, string>("Add a new concept");
         if (result.IfSome(out var name)) {
             var concept = await ViewModel!.NewConcept.Execute(name).ToTask();
             await NotifyConceptSelected(concept.Id);

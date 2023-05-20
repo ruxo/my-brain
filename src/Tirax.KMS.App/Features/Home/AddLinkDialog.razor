@@ -1,0 +1,40 @@
+﻿@inherits ReactiveComponentBase<AddLinkDialog.VModel>
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h3">Add Link</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Class="mb-2">
+            <MudItem xs="12" sm="7">
+                <MudPaper Class="pa-4">
+                    <MudForm @bind-Errors="ViewModel!.Errors">
+                        <MudTextField Required="true" RequiredError="URL is required"
+                                      @bind-Value="ViewModel!.LinkUrl" Immediate="true"
+                                      Label="URL" />
+                        <MudTextField @bind-Value="ViewModel!.Name" Immediate="true" Label="Name" />
+                    </MudForm>
+                    <div class="mt-4 d-flex justify-space-between">
+                        <MudButton Color="Color.Error" OnClick="CancelDialog">Cancel</MudButton>
+                        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                                   Disabled="ViewModel!.HasError"
+                                   OnClick="ConfirmSave">Create</MudButton>
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="5">
+                <MudPaper Class="pa-4 mud-height-full">
+                    @if (ViewModel!.HasError) {
+                        <MudText Typo="Typo.subtitle2">@ViewModel!.Errors.Length error(s).</MudText>
+                        foreach (var e in ViewModel!.Errors) {
+                            <MudText Color="Color.Error">@e</MudText>
+                        }
+                    }
+                    else {
+                        <MudText Typo="Typo.subtitle2">No errors.</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+</MudDialog>

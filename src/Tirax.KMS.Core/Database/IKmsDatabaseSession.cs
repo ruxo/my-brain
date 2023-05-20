@@ -9,9 +9,13 @@ public interface IKmsDatabase
 
 public interface IKmsDatabaseSession : IAsyncDisposable
 {
+    Task<LinkObject> CreateLink(ConceptId owner, Option<string> name, URI uri);
     Task<Concept> CreateSubConcept(ConceptId owner, string name);
     
-    Task<Seq<Concept>> FetchConcept(ConceptId conceptId);
+    Task<Option<Concept>> FetchConcept(ConceptId conceptId);
+    Task<(Seq<Concept> Result, Seq<ConceptId> Invalids)> FetchConcepts(Seq<ConceptId> conceptIds);
+    Task<(Seq<LinkObject> Result, Seq<ConceptId> Invalids)> FetchLinkObjects(Seq<ConceptId> linkIds);
+    
     Task<Seq<ConceptTag>> GetTags();
     Task<Concept> GetHome();
     Task<Seq<ConceptId>> FetchOwners(ConceptId conceptId);

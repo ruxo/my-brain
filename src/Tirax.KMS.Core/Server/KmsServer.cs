@@ -17,6 +17,8 @@ public interface IKmsServer : IDisposable
 
     ValueTask<Concept> CreateSubConcept(ConceptId owner, string name);
 
+    ValueTask<Concept> NewLink(Concept owner, Option<string> name, URI uri);
+    ValueTask<Seq<LinkObject>> GetLinks(Seq<ConceptId> linkIds);
     ValueTask<Seq<Concept>> GetOwners(ConceptId id);
 
     ValueTask<Concept> Update(Concept concept);
@@ -80,6 +82,15 @@ public sealed class KmsServer : IKmsServer
         return await Transact(Operations.CreateSubConcept(session, owner, name));
     }
 
+    public async ValueTask<Concept> NewLink(Concept owner, Option<string> name, URI uri) {
+        await using var session = db.Session();
+        var (concept, _) = await Transact(Operations.CreateLink(session, owner, name, uri));
+        return concept;
+    }
+
+    public ValueTask<Seq<LinkObject>> GetLinks(Seq<ConceptId> linkIds) => 
+        Fetch(linkIds, state => state.Links, Operations.FetchLinkObject);
+
     public async ValueTask<Seq<Concept>> GetOwners(ConceptId id) {
         var state = await snapshot;
         var owners = state.Owners.Find(id).IfSome(out var result) ? result.ToSeq() : await findOwners();
@@ -98,17 +109,20 @@ public sealed class KmsServer : IKmsServer
         return await Transact(Operations.Update(session, current, concept));
     }
 
-    async ValueTask<Seq<Concept>> FetchUnsafe(Seq<ConceptId> ids) {
+    ValueTask<Seq<Concept>> FetchUnsafe(Seq<ConceptId> ids) => 
+        Fetch(ids, state => state.Concepts, Operations.Fetch);
+
+    async ValueTask<Seq<T>> Fetch<T>(Seq<ConceptId> ids,
+                                     Func<State, Map<ConceptId, T>> getMap,
+                                     Func<IKmsDatabaseSession, Seq<ConceptId>, TransactionResult<Seq<T>>> fetch) {
         var state = await snapshot;
-        var (existing, needFetching) = ids.Partition(state.Concepts.ContainsKey, cid => state.Concepts[cid], identity);
-        if (needFetching.Any()) {
-            await using var session = db.Session();
-            var fetched = await Task.WhenAll(needFetching.Map(cid => Transact(Operations.Fetch(session, cid))));
-            if (fetched.Any(c => c.IsNone)) throw new ArgumentOutOfRangeException($"Some ids are invalid: {ids}");
-            return Seq(fetched).Choose(identity).Append(existing.ToSeq());
-        }
-        else
-            return existing.ToSeq();
+        var map = getMap(state);
+        var (existing, needFetching) = ids.Partition(map.Find);
+        if (needFetching.IsEmpty) return existing;
+
+        await using var session = db.Session();
+        var fetched = await Transact(fetch(session, needFetching.ToSeq()));
+        return existing.Append(fetched);
     }
 
     #region Transaction methods
@@ -170,10 +184,16 @@ public sealed class KmsServer : IKmsServer
             if (state.Concepts.Find(id).IfSome(out var existing))
                 return (state, new(existing));
             
-            var concepts = await session.FetchConcept(id);
-            var newState = state with{ Concepts = state.Concepts.AddRange(concepts.Map(c => (c.Id, c))) };
-            return (newState, new(concepts.HeadOrNone()));
+            var concept = await session.FetchConcept(id);
+            var newState = state with{ Concepts = concept.Map(c => state.Concepts.Add(c.Id, c)).IfNone(state.Concepts) };
+            return (newState, new(concept));
         };
+
+        public static TransactionResult<Seq<Concept>> Fetch(IKmsDatabaseSession session, Seq<ConceptId> ids) =>
+            Fetch(ids, state => state.Concepts, (state, map) => state with{ Concepts = map }, session.FetchConcepts);
+
+        public static TransactionResult<Seq<LinkObject>> FetchLinkObject(IKmsDatabaseSession session, Seq<ConceptId> ids) => 
+            Fetch(ids, state => state.Links, (state, map) => state with{ Links = map }, session.FetchLinkObjects);
 
         public static TransactionResult<Seq<ConceptId>> FindOwners(IKmsDatabaseSession session, ConceptId cid) => async state => {
             if (state.Owners.Find(cid).IfSome(out var existing))
@@ -192,10 +212,37 @@ public sealed class KmsServer : IKmsServer
             return (newState, new(newConcept));
         };
 
+        public static TransactionResult<(Concept, LinkObject)> CreateLink(IKmsDatabaseSession session, Concept owner, Option<string> name, URI uri) =>
+            async state => {
+                var link = await session.CreateLink(owner.Id, name, uri);
+                var updated = owner with{ Links = owner.Links.Add(link.Id) };
+                var newState = state with{
+                    Concepts = state.Concepts.AddOrUpdate(updated.Id, updated),
+                    Links = state.Links.Add(link.Id, link)
+                };
+                return (newState, new((updated, link)));
+            };
+
         public static TransactionResult<Concept> Update(IKmsDatabaseSession session, Concept old, Concept @new) => async state => {
             var concept = await session.Update(old, @new);
             var newState = state with{ Concepts = state.Concepts.AddOrUpdate(concept.Id, concept) };
             return (newState, new(concept));
         };
+
+        static TransactionResult<Seq<T>> Fetch<T>(Seq<ConceptId> ids,
+                                                  Func<State, Map<ConceptId, T>> getMap,
+                                                  Func<State, Map<ConceptId, T>, State> setMap,
+                                                  Func<Seq<ConceptId>, Task<(Seq<T>, Seq<ConceptId>)>> fetch) where T : IDomainObject =>
+            async state => {
+                var map = getMap(state);
+                var (existings, missings) = ids.Partition(map.Find);
+
+                var (missingConcepts, invalids) = await fetch(missings);
+                var newState = setMap(state, map.AddRange(missingConcepts.Map(c => (c.Id, c))));
+                var result = invalids.IsEmpty
+                                 ? new(existings.Append(missingConcepts))
+                                 : new Result<Seq<T>>(new InvalidOperationException($"Invalid IDS: {invalids}"));
+                return (newState, result);
+            };
     }
 }

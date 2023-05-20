@@ -26,7 +26,12 @@ public readonly record struct URI(string Value)
 }
 #endregion
 
-public sealed record Concept(ConceptId Id, string Name)
+public interface IDomainObject
+{
+    ConceptId Id { get; }
+}
+
+public sealed record Concept(ConceptId Id, string Name) : IDomainObject
 {
     public LanguageExt.HashSet<ConceptId> Contains { get; init; }
     public Option<string> Note { get; init; } 
@@ -34,6 +39,6 @@ public sealed record Concept(ConceptId Id, string Name)
     public LanguageExt.HashSet<ConceptId> Tags { get; init; }
 }
 
-public readonly record struct ConceptTag(ConceptId Id, string Name);
+public readonly record struct ConceptTag(ConceptId Id, string Name) : IDomainObject;
 
-public sealed record LinkObject(ConceptId Id, Option<string> Name, URI Uri);
+public sealed record LinkObject(ConceptId Id, Option<string> Name, URI Uri) : IDomainObject;
