@@ -185,7 +185,9 @@ public sealed class KmsServer : IKmsServer
                 return (state, new(existing));
             
             var concept = await session.FetchConcept(id);
-            var newState = state with{ Concepts = concept.Map(c => state.Concepts.Add(c.Id, c)).IfNone(state.Concepts) };
+            var newState = state with{
+                Concepts = concept.Map(c => state.Concepts.Add(c.Id, c)).IfNone(state.Concepts)
+            };
             return (newState, new(concept));
         };
 
@@ -197,7 +199,7 @@ public sealed class KmsServer : IKmsServer
 
         public static TransactionResult<Seq<ConceptId>> FindOwners(IKmsDatabaseSession session, ConceptId cid) => async state => {
             if (state.Owners.Find(cid).IfSome(out var existing))
-                return (new(), new(existing));
+                return (state, new(existing));
             var ownerIds = await session.FetchOwners(cid);
             var newState = state with{ Owners = state.Owners.Add(cid, ownerIds) };
             return (newState, new(ownerIds));
@@ -205,8 +207,10 @@ public sealed class KmsServer : IKmsServer
 
         public static TransactionResult<Concept> CreateSubConcept(IKmsDatabaseSession session, ConceptId owner, string name) => async state => {
             var newConcept = await session.CreateSubConcept(owner, name);
+            var ownerConcept = state.Concepts[owner];
+            var updatedOwner = ownerConcept with{ Contains = ownerConcept.Contains.Add(newConcept.Id) };
             var newState = state with{
-                Concepts = state.Concepts.Add(newConcept.Id, newConcept),
+                Concepts = state.Concepts.Add(newConcept.Id, newConcept).AddOrUpdate(owner, updatedOwner),
                 Owners = state.Owners.Add(newConcept.Id, Seq1(owner))
             };
             return (newState, new(newConcept));
