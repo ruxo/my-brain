@@ -1,5 +1,6 @@
 ﻿using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
+using DynamicData.Binding;
 using LanguageExt.UnsafeValueAccess;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
@@ -59,11 +60,14 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
         Option<Concept> concept;
         readonly ObservableAsPropertyHelper<string> name;
         bool isSaving;
+        bool isNameEditing;
+        string editingName = string.Empty;
 
-        readonly ObservableAsPropertyHelper<string> editButtonIcon;
-        readonly ObservableAsPropertyHelper<Color> editButtonColor;
         readonly ObservableAsPropertyHelper<Observation<System.Collections.Generic.HashSet<ConceptListItem>>> subConcepts;
         readonly ObservableAsPropertyHelper<List<BreadcrumbItem>> ownerBreadcrumbs;
+
+        readonly ObservableAsPropertyHelper<string> addConceptButtonIcon;
+        readonly ObservableAsPropertyHelper<Color> addConceptButtonColor;
 
         public readonly record struct ConceptListItem(Observation<Concept> Concept, System.Collections.Generic.HashSet<ConceptListItem> SubConcepts);
 
@@ -81,12 +85,21 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
                                    .SelectMany(async c => await server.GetOwners(c.Get().Id))
                                    .Select(owners => new List<BreadcrumbItem>(owners.Map(c => new BreadcrumbItem(c.Name, c.Id))))
                                    .ToProperty(this, my => my.OwnerBreadcrumbs, new List<BreadcrumbItem>());
-            editButtonIcon = this.WhenAnyValue(x => x.isSaving)
+            addConceptButtonIcon = this.WhenAnyValue(x => x.isSaving)
                                  .Select(saving => saving ? Icons.Material.Filled.Savings : Icons.Material.Filled.Add)
-                                 .ToProperty(this, x => x.EditButtonIcon);
-            editButtonColor = this.WhenAnyValue(x => x.isSaving)
+                                 .ToProperty(this, x => x.AddConceptButtonIcon);
+            addConceptButtonColor = this.WhenAnyValue(x => x.isSaving)
                                   .Select(saving => saving ? Color.Dark : Color.Primary)
-                                  .ToProperty(this, x => x.EditButtonColor);
+                                  .ToProperty(this, x => x.AddConceptButtonColor);
+
+            #region Name Editing
+            this.WhenAnyValue(my => my.Concept).Subscribe(_ => IsNameEditing = false);
+            this.WhenAnyValue(my => my.Name).Subscribe(n => editingName = n);
+            
+            BeginEditName = ReactiveCommand.Create(() => IsNameEditing = true);
+            CancelEditName = ReactiveCommand.Create(() => IsNameEditing = false);
+            SaveEditName = ReactiveCommand.CreateFromTask(UpdateConcept);
+            #endregion
             
             NewConcept = ReactiveCommand.CreateFromTask<string,Concept>(NewConceptTask);
         }
@@ -101,17 +114,46 @@ public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VMode
         public Observation<System.Collections.Generic.HashSet<ConceptListItem>> SubConcepts => subConcepts.Value;
 
         public List<BreadcrumbItem> OwnerBreadcrumbs => ownerBreadcrumbs.Value;
-        
-        public ReactiveCommand<string,Concept> NewConcept { get; }
 
         public bool IsSaving {
             get => isSaving;
             set => this.RaiseAndSetIfChanged(ref isSaving, value);
         }
+        
+        public string AddConceptButtonIcon => addConceptButtonIcon.Value;
+        public Color AddConceptButtonColor => addConceptButtonColor.Value;
 
-        public string EditButtonIcon => editButtonIcon.Value;
-        public Color EditButtonColor => editButtonColor.Value;
+        #region Name Editing
 
+        public string EditingName {
+            get => editingName;
+            set => this.RaiseAndSetIfChanged(ref editingName, value);
+        }
+        
+        public bool IsNameEditing {
+            get => isNameEditing;
+            set => this.RaiseAndSetIfChanged(ref isNameEditing, value);
+        }
+        
+        public ReactiveCommand<Unit,bool> BeginEditName { get; }
+        public ReactiveCommand<Unit,bool> CancelEditName { get; }
+        public ReactiveCommand<Unit,Unit> SaveEditName { get; }
+
+        async Task UpdateConcept() {
+            IsSaving = true;
+            try {
+                var current = Concept.Get();
+                var updated = current with{ Name = editingName };
+                Concept = await server.Update(updated);
+            }
+            finally {
+                IsSaving = false;
+            }
+        }
+        
+        #endregion
+
+        public ReactiveCommand<string,Concept> NewConcept { get; }
         async Task<Concept> NewConceptTask(string conceptName) {
             IsSaving = true;
             try {

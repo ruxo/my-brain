@@ -18,6 +18,8 @@ public interface IKmsServer : IDisposable
     ValueTask<Concept> CreateSubConcept(ConceptId owner, string name);
 
     ValueTask<Seq<Concept>> GetOwners(ConceptId id);
+
+    ValueTask<Concept> Update(Concept concept);
 }
 
 public sealed class KmsServer : IKmsServer
@@ -89,6 +91,13 @@ public sealed class KmsServer : IKmsServer
         }
     }
 
+    public async ValueTask<Concept> Update(Concept concept) {
+        var state = await snapshot;
+        var current = state.Concepts[concept.Id];
+        await using var session = db.Session();
+        return await Transact(Operations.Update(session, current, concept));
+    }
+
     async ValueTask<Seq<Concept>> FetchUnsafe(Seq<ConceptId> ids) {
         var state = await snapshot;
         var (existing, needFetching) = ids.Partition(state.Concepts.ContainsKey, cid => state.Concepts[cid], identity);
@@ -107,11 +116,11 @@ public sealed class KmsServer : IKmsServer
     Task<T> Transact<T>(TransactionResult<T> operation) {
         var response = new TaskCompletionSource<T>();
 
-        async Task<ChangeLogs> updater(State state) {
+        async Task<State> updater(State state) {
             try {
-                var (changes, result) = await operation(state);
+                var (newState, result) = await operation(state);
                 result.Then(response.SetResult, response.SetException);
-                return changes;
+                return newState;
             }
             catch (Exception e) {
                 response.SetException(e);
@@ -128,8 +137,8 @@ public sealed class KmsServer : IKmsServer
         try {
             foreach (var updater in inbox.GetConsumingEnumerable()) {
                 var state = await snapshot;
-                var changes = await updater(state).ConfigureAwait(false);
-                snapshot = Task.FromResult(Apply(state, changes));
+                var newState = await updater(state).ConfigureAwait(false);
+                snapshot = Task.FromResult(newState);
             }
             inboxQuit.Set();
         }
@@ -142,17 +151,6 @@ public sealed class KmsServer : IKmsServer
         }
     }
 
-    static State ApplyChange(State state, ModelChange change) =>
-        change switch{
-            ModelChange.ConceptChange c    => state with{ Concepts = c.Concept.Apply(state.Concepts, ct => ct.Id) },
-            ModelChange.Tag t              => state with{ Tags = t.Value.Apply(state.Tags, tag => tag.Id) },
-            ModelChange.OwnerChange o      => state with{ Owners = o.Owner.Apply(state.Owners) },
-            ModelChange.LinkObjectChange l => state with{ Links = l.Link.Apply(state.Links, link => link.Id) },
-            _                              => throw new NotSupportedException()
-        };
-
-    static State Apply(State state, ChangeLogs changes) => changes.Value.Fold(state, ApplyChange);
-
     #endregion
 
     readonly record struct State(
@@ -163,33 +161,41 @@ public sealed class KmsServer : IKmsServer
         Map<ConceptId, Seq<ConceptId>> Owners
     );
 
-    delegate Task<ChangeLogs> TransactionTask(State state);
-    delegate Task<(ChangeLogs Changes, Result<T> Result)> TransactionResult<T>(State server);
+    delegate Task<State> TransactionTask(State state);
+    delegate Task<(State NewState, Result<T> Result)> TransactionResult<T>(State server);
 
     static class Operations
     {
         public static TransactionResult<Option<Concept>> Fetch(IKmsDatabaseSession session, ConceptId id) => async state => {
             if (state.Concepts.Find(id).IfSome(out var existing))
-                return (new(), new(existing));
+                return (state, new(existing));
             
             var concepts = await session.FetchConcept(id);
-            var changes = concepts.Map(c => ModelChange.NewConceptChange(ModelOperationType.Add(c)));
-            return (new(changes), new(concepts.HeadOrNone()));
+            var newState = state with{ Concepts = state.Concepts.AddRange(concepts.Map(c => (c.Id, c))) };
+            return (newState, new(concepts.HeadOrNone()));
         };
 
         public static TransactionResult<Seq<ConceptId>> FindOwners(IKmsDatabaseSession session, ConceptId cid) => async state => {
             if (state.Owners.Find(cid).IfSome(out var existing))
                 return (new(), new(existing));
             var ownerIds = await session.FetchOwners(cid);
-            var changes = ModelChange.NewOwnerChange(ModelOperationType.Add((cid, ownerIds)));
-            return (new(Seq1(changes)), new(ownerIds));
+            var newState = state with{ Owners = state.Owners.Add(cid, ownerIds) };
+            return (newState, new(ownerIds));
         };
 
-        public static TransactionResult<Concept> CreateSubConcept(IKmsDatabaseSession session, ConceptId owner, string name) => async _ => {
+        public static TransactionResult<Concept> CreateSubConcept(IKmsDatabaseSession session, ConceptId owner, string name) => async state => {
             var newConcept = await session.CreateSubConcept(owner, name);
-            var changes = Seq(ModelChange.NewConceptChange(ModelOperationType.Add(newConcept)),
-                              ModelChange.NewOwnerChange(ModelOperationType.Add((newConcept.Id, Seq1(owner)))));
-            return (new(changes), new(newConcept));
+            var newState = state with{
+                Concepts = state.Concepts.Add(newConcept.Id, newConcept),
+                Owners = state.Owners.Add(newConcept.Id, Seq1(owner))
+            };
+            return (newState, new(newConcept));
+        };
+
+        public static TransactionResult<Concept> Update(IKmsDatabaseSession session, Concept old, Concept @new) => async state => {
+            var concept = await session.Update(old, @new);
+            var newState = state with{ Concepts = state.Concepts.AddOrUpdate(concept.Id, concept) };
+            return (newState, new(concept));
         };
     }
 }

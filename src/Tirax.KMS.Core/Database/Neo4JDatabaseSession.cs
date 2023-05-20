@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
 using Tirax.KMS.Domain;
@@ -118,6 +119,21 @@ WHERE elementId(concept) = $cid
 RETURN elementId(owner) AS id
 """;
         return Query(q, rec => new ConceptId(rec["id"].As<string>()), new{ cid = conceptId.Value });
+    }
+
+    public async Task<Concept> Update(Concept old, Concept @new) {
+        Debug.Assert(old.Id == @new.Id);
+        
+        var sb = new StringBuilder(128);
+        if (old.Name != @new.Name)
+            sb.AppendLine("SET concept.name = $name");
+
+        if (sb.Length > 0) {
+            sb.Insert(0, "MATCH (concept:Concept)\nWHERE elementId(concept) = $cid\n");
+
+            await session.RunAsync(sb.ToString(), new{ cid = @new.Id.Value, name = @new.Name });
+        }
+        return @new;
     }
 
     Task<Seq<T>> Query<T>(string query, Func<IRecord, T> mapper, object? parameters = null) =>
