@@ -65,6 +65,12 @@ static class Materialization
         return new(node.ElementId, Optional(node["name"].As<string>()), new(node["uri"].As<string>()));
     }
 
+    public static (Concept, float) ToSearchConceptResult(this IRecord record) {
+        var score = record["score"].As<float>();
+        var concept = record.ToConcept();
+        return (concept, score);
+    }
+
     static Seq<ConceptId> ReadConceptIdList(this IRecord record, string fieldName) =>
         record[fieldName].As<IEnumerable<object>>().ToSeq().Map(o => new ConceptId(o.As<string>()));
 }
@@ -90,7 +96,7 @@ public sealed class Neo4JDatabaseSession : IKmsDatabaseSession
 
     #endregion
 
-    const string ConceptReturn = "RETURN concept, [(concept)-[:CONTAINS]->(sub)|elementId(sub)] AS contains," +
+    const string ConceptReturn = " RETURN concept, [(concept)-[:CONTAINS]->(sub)|elementId(sub)] AS contains," +
                                  "[(concept)-[:REFERS]->(link)|elementId(link)] AS links," +
                                  "[(concept)-[:TAG]->(tag)|elementId(tag)] AS tags";
 
@@ -149,6 +155,15 @@ WHERE elementId(concept) = $cid
 RETURN elementId(owner) AS id
 """;
         return Query(q, rec => new ConceptId(rec["id"].As<string>()), new{ cid = conceptId.Value });
+    }
+
+    public Task<Seq<(Concept, float)>> SearchByName(string name) {
+        const string q = """
+CALL db.index.fulltext.queryNodes("conceptNameIndex", $name) YIELD node, score
+WITH node AS concept, score
+""" + ConceptReturn + ", score";
+
+        return Query(q, Materialization.ToSearchConceptResult, new{ name });
     }
 
     public async Task<Concept> Update(Concept old, Concept @new) {

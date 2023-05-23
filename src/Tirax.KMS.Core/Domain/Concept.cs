@@ -37,6 +37,8 @@ public sealed record Concept(ConceptId Id, string Name) : IDomainObject
     public Option<string> Note { get; init; } 
     public LanguageExt.HashSet<ConceptId> Links { get; init; }
     public LanguageExt.HashSet<ConceptId> Tags { get; init; }
+
+    public override string ToString() => Name;
 }
 
 public readonly record struct ConceptTag(ConceptId Id, string Name) : IDomainObject;

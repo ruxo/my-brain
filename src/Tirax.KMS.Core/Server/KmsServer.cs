@@ -13,7 +13,7 @@ public interface IKmsServer : IDisposable
 {
     ValueTask<Concept> GetHome();
     ValueTask<Option<Concept>> Fetch(ConceptId id);
-    ValueTask<Seq<Concept>> Search(string keyword, CancellationToken cancellationToken);
+    ValueTask<Seq<(Concept Concept, float Score)>> Search(string keyword);
 
     ValueTask<Concept> CreateSubConcept(ConceptId owner, string name);
 
@@ -73,8 +73,9 @@ public sealed class KmsServer : IKmsServer
         }
     }
 
-    public ValueTask<Seq<Concept>> Search(string keyword, CancellationToken cancellationToken) {
-        throw new NotImplementedException();
+    public async ValueTask<Seq<(Concept, float)>> Search(string keyword) {
+        await using var session = db.Session();
+        return await Transact(Operations.SearchName(session, $"*{keyword}*"));
     }
 
     public async ValueTask<Concept> CreateSubConcept(ConceptId owner, string name) {
@@ -231,6 +232,12 @@ public sealed class KmsServer : IKmsServer
             var concept = await session.Update(old, @new);
             var newState = state with{ Concepts = state.Concepts.AddOrUpdate(concept.Id, concept) };
             return (newState, new(concept));
+        };
+
+        public static TransactionResult<Seq<(Concept, float)>> SearchName(IKmsDatabaseSession session, string name) => async state => {
+            var result = await session.SearchByName(name);
+            var newState = state with{ Concepts = state.Concepts.AddOrUpdateRange(from i in result select (i.Concept.Id, i.Concept)) };
+            return (newState, new(result));
         };
 
         static TransactionResult<Seq<T>> Fetch<T>(Seq<ConceptId> ids,

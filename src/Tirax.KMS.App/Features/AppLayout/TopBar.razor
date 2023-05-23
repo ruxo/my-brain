@@ -28,7 +28,7 @@
     async Task<IEnumerable<Domain.Concept>> Search(string s, CancellationToken ct) =>
         string.IsNullOrWhiteSpace(s)
             ? Enumerable.Empty<Domain.Concept>()
-            : await Server.Search(s.Trim(), ct);
+            : (await Server.Search(s.Trim())).Map(i => i.Concept);
 
     Task ToggleIsOpen() => ViewModel!.ToggleDrawerOpen.Execute().ToTask();
     Task GoHome() => ViewModel!.GoHome.Execute().ToTask();
