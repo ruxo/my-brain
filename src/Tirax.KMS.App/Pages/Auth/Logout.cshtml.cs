@@ -3,10 +3,11 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Tirax.KMS.App.Features.Authentication;
 
 namespace Tirax.KMS.App.Pages.Auth;
 
-[Authorize(Policy = "Authenticated")]
+[Authorize(Policy = KmsAuthPolicy.Authenticated)]
 public class Logout : PageModel
 {
     public async Task OnGet() {

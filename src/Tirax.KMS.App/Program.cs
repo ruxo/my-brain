@@ -92,7 +92,7 @@ builder.Services.AddAuthentication(opts => {
 builder.Services.AddScoped<KmsJs>();
 
 builder.Services.AddAuthorizationCore(opts => {
-    opts.AddPolicy("Authenticated", b => b.RequireAuthenticatedUser());
+    opts.AddPolicy(KmsAuthPolicy.Authenticated, b => b.RequireAuthenticatedUser());
     opts.AddPolicy(KmsAuthPolicy.User, b => b.RequireClaim(KmsPrincipal.PermissionsClaim, KmsAuthPolicy.User));
     opts.DefaultPolicy = new AuthorizationPolicyBuilder()
                         .RequireAuthenticatedUser()

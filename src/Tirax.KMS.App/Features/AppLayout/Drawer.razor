@@ -7,7 +7,6 @@
 <MudDrawer ClipMode="DrawerClipMode.Always" Elevation="2" Open="ViewModel?.DrawerIsOpen ?? false">
     <MudNavMenu>
         <MudNavLink Href="/" Match="NavLinkMatch.All">Home</MudNavLink>
-        <MudNavLink Href="/user/profile" Match="NavLinkMatch.All">User Profile</MudNavLink>
         
         <AuthorizeView Policy="Authenticated">
             <MudNavLink OnClick="Logout">Logout</MudNavLink>
