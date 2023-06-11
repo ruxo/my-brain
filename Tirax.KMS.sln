@@ -11,6 +11,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		src\CommonGlobalUsings.cs = src\CommonGlobalUsings.cs
 		src\Directory.Build.props = src\Directory.Build.props
 		db\schema.cypher = db\schema.cypher
+		.dockerignore = .dockerignore
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tirax.KMS.App", "src\Tirax.KMS.App\Tirax.KMS.App.csproj", "{EE733A6B-63FE-407E-BF28-04CA650284A7}"
