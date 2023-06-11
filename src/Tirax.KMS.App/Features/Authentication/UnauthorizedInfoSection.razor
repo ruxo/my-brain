@@ -1,0 +1,29 @@
+﻿@using Tirax.KMS.App.Services.Interop
+@inject NavigationManager NavManager
+@inject KmsJs KmsJs
+
+@if (currentUser.IsAuthenticated) {
+    <h1>Permission denied</h1>
+}
+else {
+    <MudText>You are not logged in.</MudText>
+    <MudFab OnClick="Login" Label="Login" />
+}
+
+@code {
+
+    [CascadingParameter]
+    Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    KmsPrincipal currentUser = KmsPrincipal.Guest;
+
+    protected override async Task OnInitializedAsync() {
+        var auth = await AuthState;
+        currentUser = new(auth.User);
+    }
+
+    void Login() {
+        KmsJs.NavigateToLogin(NavManager.Uri);
+    }
+
+}

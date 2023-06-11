@@ -5,7 +5,7 @@
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
             <Authorizing>Authorizing...</Authorizing>
-            <NotAuthorized>Permission denied</NotAuthorized>
+            <NotAuthorized><UnauthorizedInfoSection /></NotAuthorized>
         </AuthorizeRouteView>
         <FocusOnNavigate RouteData="@routeData" Selector="h1"/>
     </Found>

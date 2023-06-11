@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.Logging;
 using MudBlazor.Services;
@@ -44,7 +45,12 @@ builder.Services.AddAuthentication(opts => {
             opts.DefaultAuthenticateScheme = opts.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             opts.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
         })
-       .AddCookie()
+       .AddCookie(opts => {
+            opts.SlidingExpiration = false;
+            opts.Cookie.HttpOnly = true;
+            opts.Cookie.SameSite = SameSiteMode.Strict;
+            opts.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        })
        .AddOpenIdConnect(opts => {
             var c = builder.Configuration;
             var audience = c["Oidc:Audience"]!;
@@ -84,6 +90,16 @@ builder.Services.AddAuthentication(opts => {
             };
         });
 builder.Services.AddScoped<KmsJs>();
+
+builder.Services.AddAuthorizationCore(opts => {
+    opts.AddPolicy("Authenticated", b => b.RequireAuthenticatedUser());
+    opts.AddPolicy(KmsAuthPolicy.User, b => b.RequireClaim(KmsPrincipal.PermissionsClaim, KmsAuthPolicy.User));
+    opts.DefaultPolicy = new AuthorizationPolicyBuilder()
+                        .RequireAuthenticatedUser()
+                        .RequireClaim(KmsPrincipal.PermissionsClaim, KmsAuthPolicy.User)
+                        .RequireClaim(KmsPrincipal.AccessTokenClaim)
+                        .Build();
+});
 
 var app = builder.Build();
 

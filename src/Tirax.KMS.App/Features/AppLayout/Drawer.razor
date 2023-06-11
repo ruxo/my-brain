@@ -8,9 +8,14 @@
     <MudNavMenu>
         <MudNavLink Href="/" Match="NavLinkMatch.All">Home</MudNavLink>
         <MudNavLink Href="/user/profile" Match="NavLinkMatch.All">User Profile</MudNavLink>
-        <MudNavLink OnClick="Logout">Logout</MudNavLink>
-        <MudDivider/>
-        <MudNavGroup Title="Favorites" />
+        
+        <AuthorizeView Policy="Authenticated">
+            <MudNavLink OnClick="Logout">Logout</MudNavLink>
+        </AuthorizeView>
+        <AuthorizeView>
+            <MudDivider/>
+            <MudNavGroup Title="Favorites" />
+        </AuthorizeView>
     </MudNavMenu> 
 </MudDrawer>
 

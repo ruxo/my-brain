@@ -1,4 +1,5 @@
 ﻿@page "/"
+@attribute [AllowAnonymous]
 @inject NavigationManager NavManager
 @inject AppModel.ViewModel VM
     
@@ -12,7 +13,7 @@
 @code {
 
     void GoHome() {
-        NavManager.NavigateTo($"/topic/{VM.CurrentTopic}");
+        NavManager.NavigateTo($"/topic/{VM.Home.Id}");
     }
 
 }

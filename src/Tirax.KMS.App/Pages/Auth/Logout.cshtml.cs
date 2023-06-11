@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Tirax.KMS.App.Pages.Auth;
 
-[Authorize]
+[Authorize(Policy = "Authenticated")]
 public class Logout : PageModel
 {
     public async Task OnGet() {

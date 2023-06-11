@@ -11,13 +11,14 @@
     <MudLink Typo="Typo.h5" Color="Color.Surface" Underline="Underline.None" Class="mx-3" 
              OnClick="GoHome">Tirax KMS</MudLink>
     
-    <MudAutocomplete T="Domain.Concept" Label="Search" SelectOnClick="true" Variant="Variant.Outlined"
-                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" 
-                     AdornmentColor="Color.Secondary" Margin="Margin.Dense" DebounceInterval="200"
-                     SearchFuncWithCancel="Search"
-                     ValueChanged="concept => ViewModel!.CurrentTopic = concept.Id">
-        
-    </MudAutocomplete>
+    <AuthorizeView Policy="@KmsAuthPolicy.User">
+        <MudAutocomplete T="Domain.Concept" Label="Search" SelectOnClick="true" Variant="Variant.Outlined"
+                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" 
+                         AdornmentColor="Color.Secondary" Margin="Margin.Dense" DebounceInterval="200"
+                         SearchFuncWithCancel="Search"
+                         ValueChanged="concept => ViewModel!.CurrentTopic = concept.Id">
+        </MudAutocomplete>
+    </AuthorizeView>
 </MudAppBar>
 
 @code {

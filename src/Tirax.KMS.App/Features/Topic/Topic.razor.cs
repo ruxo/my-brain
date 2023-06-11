@@ -12,6 +12,7 @@ public partial class Topic
 {
     public Topic() {
         this.WhenActivated(_ => {
+            AppModel.CurrentTopic = TopicId;
             ViewModel = new(AppModel);
         });
     }
@@ -24,11 +25,6 @@ public partial class Topic
     
     [Inject]
     public IKmsServer Server { get; set; } = null!;
-
-    protected override void OnParametersSet() {
-        AppModel.CurrentTopic = TopicId;
-        base.OnParametersSet();
-    }
 
     Task OnConceptSelected(ConceptId id) => AppModel.Go.Execute(id).ToTask();
 

@@ -1,49 +1,45 @@
 ﻿@page "/user/profile"
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authentication
+@attribute [AllowAnonymous]
 @inject IHttpContextAccessor HttpContextAccessor
 @inject AuthenticationStateProvider AuthState
 
-<AuthorizeView>
-   <Authorized>
-      <h1>Hello @user.Identity!.Name</h1>
-      <table>
-         <tr><th>Type</th><th>Value</th><th>Value Type</th><th>Props count</th></tr>
-         @foreach (var claim in user.Claims) {
-            <tr>
-               <td>
-                  <div>@claim.Type</div>
-                  <div style="color: silver; font-size: .6em">@claim.ValueType</div>
-               </td>
-               <td><pre>@claim.Value</pre></td>
-               <td>
-                  @if (claim.Properties.Count > 0) {
-                     <table style="border: 1px solid black">
-                        @foreach (var k in claim.Properties.Keys) {
-                           <tr><td>@k</td><td>@claim.Properties[k]</td></tr>
-                        }
-                     </table>
+<h1>Hello @user.Identity!.Name</h1>
+<table>
+   <tr><th>Type</th><th>Value</th><th>Value Type</th><th>Props count</th></tr>
+   @foreach (var claim in user.Claims) {
+      <tr>
+         <td>
+            <div>@claim.Type</div>
+            <div style="color: silver; font-size: .6em">@claim.ValueType</div>
+         </td>
+         <td><pre>@claim.Value</pre></td>
+         <td>
+            @if (claim.Properties.Count > 0) {
+               <table style="border: 1px solid black">
+                  @foreach (var k in claim.Properties.Keys) {
+                     <tr><td>@k</td><td>@claim.Properties[k]</td></tr>
                   }
-                  else {
-                     <span>&nbsp;</span>
-                  }
-               </td>
-            </tr>
-         }
-      </table>
-      @if (accessToken is not null) {
-         <hr/>
-         <h1>Access Token</h1>
-         <pre style="white-space: pre-wrap; word-wrap: break-word">@accessToken</pre>
-      }
-      @if (idToken is not null) {
-         <hr/>
-         <h1>ID Token</h1>
-         <pre style="white-space: pre-wrap; word-wrap: break-word">@idToken</pre>
-      }
-   </Authorized>
-   <NotAuthorized><RedirectToLogin /></NotAuthorized>
-</AuthorizeView>
+               </table>
+            }
+            else {
+               <span>&nbsp;</span>
+            }
+         </td>
+      </tr>
+   }
+</table>
+@if (accessToken is not null) {
+   <hr/>
+   <h1>Access Token</h1>
+   <pre style="white-space: pre-wrap; word-wrap: break-word">@accessToken</pre>
+}
+@if (idToken is not null) {
+   <hr/>
+   <h1>ID Token</h1>
+   <pre style="white-space: pre-wrap; word-wrap: break-word">@idToken</pre>
+}
 
 @code {
 
