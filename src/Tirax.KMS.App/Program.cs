@@ -1,6 +1,9 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IdentityModel.Logging;
 using MudBlazor.Services;
 using Tirax.KMS;
 using Tirax.KMS.App.Features.Authentication;
@@ -11,6 +14,8 @@ using Tirax.KMS.Server;
 
 const string DbConnectionKey = "Neo4j";
 var builder = WebApplication.CreateBuilder(args);
+
+IdentityModelEventSource.ShowPII = builder.Environment.IsDevelopment();
 
 Console.WriteLine("Initializing app...");
 var (homeId, dbConn) = await createAppModel(builder.Configuration);
@@ -42,18 +47,41 @@ builder.Services.AddAuthentication(opts => {
        .AddCookie()
        .AddOpenIdConnect(opts => {
             var c = builder.Configuration;
-            opts.Authority = c["Oidc:Authority"]!;
+            var audience = c["Oidc:Audience"]!;
+            var authority = c["Oidc:Authority"]!;
+            const string RequiredScopes = "openid profile";
+            
+            opts.Authority = authority;
             opts.ClientId = c["Oidc:ClientId"]!;
             opts.ClientSecret = c["Oidc:ClientSecret"]!;
             opts.ResponseType = "code";
-            "openid profile tirax:kms:userx".Split(' ').Iter(opts.Scope.Add);
+            RequiredScopes.Split(' ').Iter(opts.Scope.Add);
             opts.SaveTokens = true;
+            opts.UseTokenLifetime = true;
 
             var tokenValidation = opts.TokenValidationParameters;
-            tokenValidation.ValidIssuer = c["Oidc:Authority"];
+            tokenValidation.ValidIssuer = authority;
             tokenValidation.ValidateIssuer = true;
             tokenValidation.ValidateIssuerSigningKey = true;
             tokenValidation.ValidateLifetime = true;
+
+            opts.Events.OnRedirectToIdentityProvider = ctx => {
+                ctx.ProtocolMessage.SetParameter("audience", audience);
+                return Task.CompletedTask;
+            };
+            opts.Events.OnTokenValidated += ctx => {
+                var accessToken = ctx.TokenEndpointResponse!.AccessToken;
+                var jwtReader = new JwtSecurityTokenHandler();
+                var jwt = jwtReader.ReadJwtToken(accessToken);
+                var tokenIsValid = jwt.Audiences.Contains(audience);
+                Console.WriteLine("Allowed Audiences: {0}", jwt.Audiences.Join(", "));
+                if (!tokenIsValid) ctx.Fail("Required audience not found");
+
+                var permissions = jwt.Claims.ToSeq().Where(claim => claim.Type == KmsPrincipal.PermissionsClaim);
+                var additionalClaims = Seq1(new Claim(KmsPrincipal.AccessTokenClaim, accessToken)).Append(permissions);
+                ctx.Principal!.AddIdentity(new(additionalClaims));
+                return Task.CompletedTask;
+            };
         });
 builder.Services.AddScoped<KmsJs>();
 

@@ -25,14 +25,6 @@ public partial class Topic
     [Inject]
     public IKmsServer Server { get; set; } = null!;
 
-    [Inject]
-    public NavigationManager NavManager { get; set; } = null!;
-
-    void ToLogin() {
-        var loginUri = $"/auth/session?redirectUrl={Uri.EscapeDataString(NavManager.Uri)}";
-        NavManager.NavigateTo(loginUri);
-    }
-
     protected override void OnParametersSet() {
         AppModel.CurrentTopic = TopicId;
         base.OnParametersSet();
