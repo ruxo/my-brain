@@ -10,8 +10,17 @@ public sealed class KmsJs
     }
 
     /// <summary>
-    /// Prevent the reconnection message display from the Blazor framework, and break its connection. This should be used only when leaving from
-    /// a Blazor page since it breaks the reconnection logic code. The feature will be unusable until a Blazor page is reloaded.
+    /// Properly redirect to an external website (or any non-Blazor page in the running application, such as a Razor page).
     /// </summary>
-    public ValueTask BreakReconnection() => js.InvokeVoidAsync("kms.breakReconnection");
+    /// <param name="externalUrl">The URL of the destination</param>
+    public async ValueTask RedirectTo(string externalUrl) {
+        await js.InvokeVoidAsync("kms.breakReconnection");
+        await js.InvokeVoidAsync("kms.redirectTo", externalUrl);
+    }
+    
+    public ValueTask NavigateToLogin(string currentUrl) => 
+        RedirectTo($"/auth/login?redirectUri={Uri.EscapeDataString(currentUrl)}");
+
+    public ValueTask NavigateToLogout() => 
+        RedirectTo("/auth/logout");
 }

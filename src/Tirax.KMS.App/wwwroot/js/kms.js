@@ -4,6 +4,8 @@
         Blazor.defaultReconnectionHandler.onConnectionDown = _ => {}   
         Blazor.disconnect()
     }
-    return { submitForm,
-             breakReconnection }
+    const redirectTo = url => window.location.href = url
+    return { breakReconnection,
+             redirectTo,
+             submitForm }
 })()

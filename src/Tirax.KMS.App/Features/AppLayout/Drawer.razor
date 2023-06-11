@@ -21,8 +21,7 @@
     }
 
     async Task Logout() {
-        await KmsJs.BreakReconnection();
-        NavManager.NavigateToLogout();
+        await KmsJs.NavigateToLogout();
     }
 
 }

@@ -6,8 +6,7 @@ Redirect to the login page...
 
 @code {
     protected override async Task OnAfterRenderAsync(bool firstRender) {
-        await KmsJs.BreakReconnection();
-        NavManager.NavigateToLogin();
+        await KmsJs.NavigateToLogin(NavManager.Uri);
     }
 
 }

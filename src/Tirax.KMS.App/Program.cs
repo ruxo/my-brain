@@ -48,6 +48,12 @@ builder.Services.AddAuthentication(opts => {
             opts.ResponseType = "code";
             "openid profile tirax:kms:userx".Split(' ').Iter(opts.Scope.Add);
             opts.SaveTokens = true;
+
+            var tokenValidation = opts.TokenValidationParameters;
+            tokenValidation.ValidIssuer = c["Oidc:Authority"];
+            tokenValidation.ValidateIssuer = true;
+            tokenValidation.ValidateIssuerSigningKey = true;
+            tokenValidation.ValidateLifetime = true;
         });
 builder.Services.AddScoped<KmsJs>();
 
