@@ -1,6 +1,10 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor.Services;
 using Tirax.KMS;
+using Tirax.KMS.App.Features.Authentication;
+using Tirax.KMS.App.Services.Interop;
 using Tirax.KMS.Database;
 using Tirax.KMS.Domain;
 using Tirax.KMS.Server;
@@ -29,6 +33,24 @@ builder.Services.AddSingleton(sp => {
 
 builder.Services.AddMudServices();
 
+builder.Services.FixAuth0Endpoints();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddAuthentication(opts => {
+            opts.DefaultAuthenticateScheme = opts.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            opts.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+        })
+       .AddCookie()
+       .AddOpenIdConnect(opts => {
+            var c = builder.Configuration;
+            opts.Authority = c["Oidc:Authority"]!;
+            opts.ClientId = c["Oidc:ClientId"]!;
+            opts.ClientSecret = c["Oidc:ClientSecret"]!;
+            opts.ResponseType = "code";
+            "openid profile tirax:kms:userx".Split(' ').Iter(opts.Scope.Add);
+            opts.SaveTokens = true;
+        });
+builder.Services.AddScoped<KmsJs>();
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -42,13 +64,15 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");
 
 app.Run();
 
-async Task<(ConceptId, GenericDbConnection)> createAppModel(IConfiguration config) {
+static async Task<(ConceptId, GenericDbConnection)> createAppModel(IConfiguration config) {
     var connection = config.GetConnectionString(DbConnectionKey) ?? throw new InvalidOperationException($"Need '{DbConnectionKey}' connection");
     ILoggerFactory loggerFactory = new NullLoggerFactory();
     var dbConnection = GenericDbConnection.From(connection);

@@ -1,9 +1,15 @@
-﻿@inherits ReactiveComponentBase<AppModel.ViewModel>
+﻿@using Tirax.KMS.App.Services.Interop
+@inherits ReactiveComponentBase<AppModel.ViewModel>
+@inject NavigationManager NavManager
+@inject KmsJs KmsJs
 @inject AppModel.ViewModel AppModel
 
 <MudDrawer ClipMode="DrawerClipMode.Always" Elevation="2" Open="ViewModel?.DrawerIsOpen ?? false">
     <MudNavMenu>
         <MudNavLink Href="/" Match="NavLinkMatch.All">Home</MudNavLink>
+        <MudNavLink Href="/user/profile" Match="NavLinkMatch.All">User Profile</MudNavLink>
+        <MudNavLink OnClick="Logout">Logout</MudNavLink>
+        <MudDivider/>
         <MudNavGroup Title="Favorites" />
     </MudNavMenu> 
 </MudDrawer>
@@ -12,6 +18,11 @@
 
     protected override void OnInitialized() {
         ViewModel = AppModel;
+    }
+
+    async Task Logout() {
+        await KmsJs.BreakReconnection();
+        NavManager.NavigateToLogout();
     }
 
 }

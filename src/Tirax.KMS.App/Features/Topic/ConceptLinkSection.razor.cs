@@ -7,9 +7,8 @@ using Tirax.KMS.App.Extensions;
 using Tirax.KMS.Domain;
 using Tirax.KMS.Server;
 using Seq = LanguageExt.Seq;
-using Unit = System.Reactive.Unit;
 
-namespace Tirax.KMS.App.Features.Home;
+namespace Tirax.KMS.App.Features.Topic;
 
 public partial class ConceptLinkSection
 {

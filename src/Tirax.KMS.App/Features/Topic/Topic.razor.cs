@@ -6,7 +6,7 @@ using ReactiveUI;
 using Tirax.KMS.Domain;
 using Tirax.KMS.Server;
 
-namespace Tirax.KMS.App.Features.Home;
+namespace Tirax.KMS.App.Features.Topic;
 
 public partial class Topic
 {
@@ -24,6 +24,14 @@ public partial class Topic
     
     [Inject]
     public IKmsServer Server { get; set; } = null!;
+
+    [Inject]
+    public NavigationManager NavManager { get; set; } = null!;
+
+    void ToLogin() {
+        var loginUri = $"/auth/session?redirectUrl={Uri.EscapeDataString(NavManager.Uri)}";
+        NavManager.NavigateTo(loginUri);
+    }
 
     protected override void OnParametersSet() {
         AppModel.CurrentTopic = TopicId;

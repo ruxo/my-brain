@@ -4,6 +4,7 @@ using MudBlazor.Extensions;
 
 namespace Tirax.KMS.App.Extensions;
 
+// ReSharper disable once UnusedTypeParameter
 public interface IDialog<T> { }
 
 public static class DialogExtensions

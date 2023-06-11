@@ -2,7 +2,7 @@
 using MudBlazor;
 using Tirax.KMS.App.Extensions;
 
-namespace Tirax.KMS.App.Features.Home;
+namespace Tirax.KMS.App.Features.Topic;
 
 public partial class AddDialog : ComponentBase, IDialog<string>
 {

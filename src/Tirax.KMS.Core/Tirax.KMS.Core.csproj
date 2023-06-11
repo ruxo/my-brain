@@ -9,8 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="7.0.0" />
-    <PackageReference Include="Neo4j.Driver" Version="5.8.0" />
-    <PackageReference Include="ReactiveUI" Version="18.4.44" />
+    <PackageReference Include="Neo4j.Driver" Version="5.9.0" />
+    <PackageReference Include="ReactiveUI" Version="19.2.1" />
   </ItemGroup>
 
 </Project>

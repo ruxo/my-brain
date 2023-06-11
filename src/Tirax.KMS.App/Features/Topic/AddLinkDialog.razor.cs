@@ -5,7 +5,7 @@ using ReactiveUI;
 using Tirax.KMS.App.Extensions;
 using Tirax.KMS.Domain;
 
-namespace Tirax.KMS.App.Features.Home;
+namespace Tirax.KMS.App.Features.Topic;
 
 public partial class AddLinkDialog : IDialog<AddLinkDialog.Result>
 {

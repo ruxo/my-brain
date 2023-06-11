@@ -1,0 +1,23 @@
+﻿@page "/topic/{TopicId}"
+@using Tirax.KMS.App.Features.Authentication
+@inherits ReactiveComponentBase<Topic.VModel>
+
+<AuthorizeView>
+    <Authorized>
+        <MudBreadcrumbs Separator="⪧" Items="ViewModel!.Breadcrumbs">
+            <ItemTemplate Context="item">
+                <MudLink Color="Color.Secondary" Disabled="item.Disabled" OnClick="() => OnConceptSelected(item.Href)">
+                    @item.Text
+                </MudLink>
+            </ItemTemplate>
+        </MudBreadcrumbs>
+        <div class="ma-3 pa-3">
+            <LoadingSection Value="AppModel.CurrentConcept" Context="concept">
+                <View><ConceptDetails Concept="concept" OnConceptSelected="OnConceptSelected"/></View>
+            </LoadingSection>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>

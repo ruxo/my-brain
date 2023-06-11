@@ -1,0 +1,13 @@
+﻿@using Tirax.KMS.App.Services.Interop
+@inject NavigationManager NavManager
+@inject KmsJs KmsJs
+
+Redirect to the login page...
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender) {
+        await KmsJs.BreakReconnection();
+        NavManager.NavigateToLogin();
+    }
+
+}

@@ -1,19 +1,17 @@
 ﻿using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
-using DynamicData.Binding;
-using LanguageExt.UnsafeValueAccess;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 using ReactiveUI;
 using ReactiveUI.Blazor;
+using Tirax.KMS.App.Extensions;
 using Tirax.KMS.Domain;
 using Tirax.KMS.Extensions;
 using Tirax.KMS.Server;
-using Tirax.KMS.App.Extensions;
 using Seq = LanguageExt.Seq;
 using Unit = System.Reactive.Unit;
 
-namespace Tirax.KMS.App.Features.Home;
+namespace Tirax.KMS.App.Features.Topic;
 
 public partial class ConceptDetails : ReactiveComponentBase<ConceptDetails.VModel>
 {

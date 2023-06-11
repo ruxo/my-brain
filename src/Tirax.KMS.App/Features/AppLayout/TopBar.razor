@@ -1,5 +1,6 @@
 ﻿@using Tirax.KMS.Server
 @inherits ReactiveComponentBase<AppModel.ViewModel>
+@inject NavigationManager NavigationManager
 @inject IKmsServer Server
 @inject AppModel.ViewModel AppModel
 
@@ -31,5 +32,5 @@
             : (await Server.Search(s.Trim())).Map(i => i.Concept);
 
     Task ToggleIsOpen() => ViewModel!.ToggleDrawerOpen.Execute().ToTask();
-    Task GoHome() => ViewModel!.GoHome.Execute().ToTask();
+    void GoHome() => NavigationManager.NavigateTo("/");
 }
