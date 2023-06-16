@@ -30,7 +30,7 @@
     async Task<IEnumerable<Domain.Concept>> Search(string s, CancellationToken ct) =>
         string.IsNullOrWhiteSpace(s)
             ? Enumerable.Empty<Domain.Concept>()
-            : (await Server.Search(s.Trim())).Map(i => i.Concept);
+            : (await Server.Search(s.Trim(), maxResult: 10)).Map(i => i.Concept);
 
     Task ToggleIsOpen() => ViewModel!.ToggleDrawerOpen.Execute().ToTask();
     void GoHome() => NavigationManager.NavigateTo("/");

@@ -65,10 +65,10 @@ static class Materialization
         return new(node.ElementId, Optional(node["name"].As<string>()), new(node["uri"].As<string>()));
     }
 
-    public static (Concept, float) ToSearchConceptResult(this IRecord record) {
+    public static (ConceptId, float) ToSearchConceptResult(this IRecord record) {
         var score = record["score"].As<float>();
-        var concept = record.ToConcept();
-        return (concept, score);
+        var conceptId = record["conceptId"].As<string>();
+        return (conceptId, score);
     }
 
     static Seq<ConceptId> ReadConceptIdList(this IRecord record, string fieldName) =>
@@ -122,13 +122,13 @@ RETURN concept, [] AS contains, [] AS links, [] AS tags
             var newConcept = await Query(tx, q, Materialization.ToConcept, new{oid=owner.Value, name});
             return newConcept.First();
         });
-
+    
     public async Task<Option<Concept>> FetchConcept(ConceptId conceptId) {
         const string q = "MATCH (concept:Concept) WHERE elementId(concept) = $cid " + ConceptReturn;
         var result = await Query(q, Materialization.ToConcept, new{ cid = conceptId.Value });
         return result.TrySingle();
     }
-
+    
     public Task<(Seq<Concept> Result, Seq<ConceptId> Invalids)> FetchConcepts(Seq<ConceptId> conceptIds) => 
         Fetch("MATCH (concept:Concept) WHERE elementId(concept) IN $ids " + ConceptReturn,
               Materialization.ToConcept,
@@ -156,16 +156,32 @@ RETURN elementId(owner) AS id
 """;
         return Query(q, rec => new ConceptId(rec["id"].As<string>()), new{ cid = conceptId.Value });
     }
+    
+    #region Keyword search
 
-    public Task<Seq<(Concept, float)>> SearchByName(string name) {
+    public Task<Seq<(ConceptId Id, float Score)>> SearchByConceptName(string name, int maxResult) {
         const string q = """
 CALL db.index.fulltext.queryNodes("conceptNameIndex", $name) YIELD node, score
 WITH node AS concept, score
-""" + ConceptReturn + ", score";
-
-        return Query(q, Materialization.ToSearchConceptResult, new{ name });
+RETURN elementId(concept) AS conceptId, score
+LIMIT $maxResult
+""";
+        return Query(q, Materialization.ToSearchConceptResult, new{ name, maxResult });
+    }
+    
+    public Task<Seq<(ConceptId Id, float Score)>> SearchByLinkName(string name, int maxResult) {
+        const string q = """
+CALL db.index.fulltext.queryNodes("linkObjectNameIndex", $name) YIELD node, score
+WITH node AS link, score
+MATCH (concept:Concept)-[:REFERS]->(link)
+RETURN elementId(concept) AS conceptId, score
+LIMIT $maxResult
+""";
+        return Query(q, Materialization.ToSearchConceptResult, new{ name, maxResult });
     }
 
+    #endregion
+    
     public async Task<Concept> Update(Concept old, Concept @new) {
         Debug.Assert(old.Id == @new.Id);
         

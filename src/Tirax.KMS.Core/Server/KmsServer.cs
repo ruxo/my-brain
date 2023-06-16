@@ -13,7 +13,7 @@ public interface IKmsServer : IDisposable
 {
     ValueTask<Concept> GetHome();
     ValueTask<Option<Concept>> Fetch(ConceptId id);
-    ValueTask<Seq<(Concept Concept, float Score)>> Search(string keyword);
+    ValueTask<Seq<(Concept Concept, float Score)>> Search(string keyword, int maxResult);
 
     ValueTask<Concept> CreateSubConcept(ConceptId owner, string name);
 
@@ -72,11 +72,29 @@ public sealed class KmsServer : IKmsServer
             return await Transact(Operations.Fetch(session, id));
         }
     }
+    
+    #region Search by name
 
-    public async ValueTask<Seq<(Concept, float)>> Search(string keyword) {
-        await using var session = db.Session();
-        return await Transact(Operations.SearchName(session, $"*{keyword}*"));
+    public async ValueTask<Seq<(Concept Concept, float Score)>> Search(string keyword, int maxResult) {
+        var candidates = await SearchConceptForKeyword(keyword, maxResult);
+        var conceptResult = await FetchUnsafe(candidates.Map(c => c.Id));
+        var dict = conceptResult.Map(c => (c.Id, c)).ToMap();
+        return candidates.Map(c => (dict[c.Id], c.Score));
     }
+
+    async ValueTask<Seq<(ConceptId Id, float Score)>> SearchConceptForKeyword(string keyword, int maxResult) {
+        await using var searchConceptSession = db.Session();
+        await using var searchLinkSession = db.Session();
+        // TODO: encode the `keyword`
+        var searchKeyword = $"*{keyword}*";
+        var result = await Task.WhenAll(searchConceptSession.SearchByConceptName(searchKeyword, maxResult),
+                                              searchLinkSession.SearchByLinkName(searchKeyword, maxResult));
+        return Seq(from c in result.ToSeq().Flatten()
+                   group c.Score by c.Id into g
+                   select (g.Key, g.Max()));
+    }
+    
+    #endregion
 
     public async ValueTask<Concept> CreateSubConcept(ConceptId owner, string name) {
         await using var session = db.Session();
@@ -110,6 +128,11 @@ public sealed class KmsServer : IKmsServer
         return await Transact(Operations.Update(session, current, concept));
     }
 
+    /// <summary>
+    /// Assume that Concept IDs in <paramref name="ids"/> are all valid!
+    /// </summary>
+    /// <param name="ids">List of *valid* Concept IDs</param>
+    /// <returns><see cref="Concept"/> instances matched with the given IDs.</returns>
     ValueTask<Seq<Concept>> FetchUnsafe(Seq<ConceptId> ids) => 
         Fetch(ids, state => state.Concepts, Operations.Fetch);
 
@@ -232,12 +255,6 @@ public sealed class KmsServer : IKmsServer
             var concept = await session.Update(old, @new);
             var newState = state with{ Concepts = state.Concepts.AddOrUpdate(concept.Id, concept) };
             return (newState, new(concept));
-        };
-
-        public static TransactionResult<Seq<(Concept, float)>> SearchName(IKmsDatabaseSession session, string name) => async state => {
-            var result = await session.SearchByName(name);
-            var newState = state with{ Concepts = state.Concepts.AddOrUpdateRange(from i in result select (i.Concept.Id, i.Concept)) };
-            return (newState, new(result));
         };
 
         static TransactionResult<Seq<T>> Fetch<T>(Seq<ConceptId> ids,

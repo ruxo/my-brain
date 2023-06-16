@@ -20,7 +20,8 @@ public interface IKmsDatabaseSession : IAsyncDisposable
     Task<Concept> GetHome();
     Task<Seq<ConceptId>> FetchOwners(ConceptId conceptId);
 
-    Task<Seq<(Concept Concept, float Score)>> SearchByName(string name);
+    Task<Seq<(ConceptId Id, float Score)>> SearchByConceptName(string name, int maxResult);
+    Task<Seq<(ConceptId Id, float Score)>> SearchByLinkName(string name, int maxResult);
 
     Task<Concept> Update(Concept old, Concept @new);
 }
