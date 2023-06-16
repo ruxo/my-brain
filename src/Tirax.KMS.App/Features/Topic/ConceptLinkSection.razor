@@ -6,8 +6,8 @@
     <MudIconButton Icon="@Icons.Material.Rounded.Add" Color="Color.Primary" Disabled="Disabled" 
                    OnClick="ShowAddLink" />
 </MudStack>
-<MudItem xs="12" md="12">
+<MudStack Spacing="0">
     @foreach (var link in ViewModel!.Links) {
-        <MudLink Href="@link.Uri.Value" Target="_blank">@link.Name.IfNone(link.Uri.Value)</MudLink>
+        <MudLink @key="link.Uri" Href="@link.Uri.Value" Target="_blank">@link.Name.IfNone(link.Uri.Value)</MudLink>
     }
-</MudItem>
+</MudStack>
