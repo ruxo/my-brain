@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using LanguageExt.Common;
 using LanguageExt.UnitsOfMeasure;
 using Microsoft.Extensions.Logging;
@@ -24,7 +25,7 @@ public interface IKmsServer : IDisposable
     ValueTask<Concept> Update(Concept concept);
 }
 
-public sealed class KmsServer : IKmsServer
+public sealed partial class KmsServer : IKmsServer
 {
     readonly ILogger logger;
     readonly IKmsDatabase db;
@@ -85,15 +86,20 @@ public sealed class KmsServer : IKmsServer
     async ValueTask<Seq<(ConceptId Id, float Score)>> SearchConceptForKeyword(string keyword, int maxResult) {
         await using var searchConceptSession = db.Session();
         await using var searchLinkSession = db.Session();
-        // TODO: encode the `keyword`
-        var searchKeyword = $"*{keyword}*";
+        var searchKeyword = $"*{SanitizeSearchKeyword(keyword)}*";
         var result = await Task.WhenAll(searchConceptSession.SearchByConceptName(searchKeyword, maxResult),
                                               searchLinkSession.SearchByLinkName(searchKeyword, maxResult));
         return Seq(from c in result.ToSeq().Flatten()
                    group c.Score by c.Id into g
                    select (g.Key, g.Max()));
     }
-    
+
+    [GeneratedRegex(@"[\[\]{}()+\-~*&|!^?:\\\""\']", RegexOptions.Compiled)]
+    private static partial Regex LuceneSymbols();
+    static readonly Regex SearchNeedEscape = LuceneSymbols();
+
+    static string SanitizeSearchKeyword(string keyword) => SearchNeedEscape.Replace(keyword, m => $@"\{m.Value}");
+
     #endregion
 
     public async ValueTask<Concept> CreateSubConcept(ConceptId owner, string name) {

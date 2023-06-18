@@ -1,4 +1,4 @@
-﻿@using Tirax.KMS.Server
+﻿@using Tirax.KMS.Domain
 @inherits ReactiveComponentBase<AppModel.ViewModel>
 @inject NavigationManager NavigationManager
 @inject IKmsServer Server
@@ -12,25 +12,60 @@
              OnClick="GoHome">Tirax KMS</MudLink>
     
     <AuthorizeView Policy="@KmsAuthPolicy.User">
-        <MudAutocomplete T="Domain.Concept" Label="Search" SelectOnClick="true" Variant="Variant.Outlined"
-                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" 
+        <MudAutocomplete T="SearchItem" Label="Search" SelectOnClick="true" Variant="Variant.Outlined"
+                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                          AdornmentColor="Color.Secondary" Margin="Margin.Dense" DebounceInterval="200"
                          SearchFuncWithCancel="Search"
-                         ValueChanged="concept => ViewModel!.CurrentTopic = concept.Id">
+                         ShowProgressIndicator="true" ProgressIndicatorColor="Color.Warning"
+                         ToStringFunc="@(i => i.Concept.Name)"
+
+                         ValueChanged="item => ViewModel!.CurrentTopic = item.Concept.Id">
+            <ItemTemplate Context="item"><MudText>@item.Text</MudText></ItemTemplate>
         </MudAutocomplete>
     </AuthorizeView>
 </MudAppBar>
 
 @code {
 
+    sealed record SearchItem(string Text, Concept Concept);
+
     protected override void OnInitialized() {
         ViewModel = AppModel;
     }
-    
-    async Task<IEnumerable<Domain.Concept>> Search(string s, CancellationToken ct) =>
-        string.IsNullOrWhiteSpace(s)
-            ? Enumerable.Empty<Domain.Concept>()
-            : (await Server.Search(s.Trim(), maxResult: 10)).Map(i => i.Concept);
+
+    async Task<IEnumerable<SearchItem>> Search(string s, CancellationToken ct) =>
+        string.IsNullOrWhiteSpace(s) ? Enumerable.Empty<SearchItem>() : await SearchByKeyword(s.Trim());
+
+    async ValueTask<Seq<SearchItem>> SearchByKeyword(string keyword) {
+        var result = await Server.Search(keyword, 20);
+        var searchResult = await result.MapAsync(async i => new SearchItem(await GetSearchText(i.Concept), i.Concept))
+                                       .ToArrayAsync();
+        return searchResult.ToSeq();
+    }
+
+    async IAsyncEnumerable<string> GetLineageNames(Concept concept) {
+        var current = concept;
+        while (current is not null) {
+            yield return current.Name;
+            var owners = await Server.GetOwners(current.Id);
+            switch (owners.Length) {
+                case > 1:
+                    yield return $"[{owners.Map(o => o.Name).Join(", ")}]";
+                    break;
+                case 1:
+                    current = owners[0];
+                    break;
+                default:
+                    current = null;
+                    break;
+            }
+        }
+    }
+
+    async ValueTask<string> GetSearchText(Concept concept) {
+        var names = await GetLineageNames(concept).Take(3).ToArrayAsync();
+        return names.Join(" ⪧ ");
+    }
 
     Task ToggleIsOpen() => ViewModel!.ToggleDrawerOpen.Execute().ToTask();
     void GoHome() => NavigationManager.NavigateTo("/");
