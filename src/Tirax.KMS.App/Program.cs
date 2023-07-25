@@ -7,7 +7,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.Logging;
 using MudBlazor.Services;
 using Tirax.KMS;
+using Tirax.KMS.Akka;
 using Tirax.KMS.App.Features.Authentication;
+using Tirax.KMS.App.Services.Akka;
 using Tirax.KMS.App.Services.Interop;
 using Tirax.KMS.Database;
 using Tirax.KMS.Domain;
@@ -100,6 +102,9 @@ builder.Services.AddAuthorizationCore(opts => {
                         .RequireClaim(KmsPrincipal.AccessTokenClaim)
                         .Build();
 });
+
+builder.Services.AddSingleton<IActorFacade, AkkaService>();
+builder.Services.AddHostedService<AkkaService>(sp => (AkkaService)sp.GetRequiredService<IActorFacade>());
 
 var app = builder.Build();
 

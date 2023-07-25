@@ -23,12 +23,15 @@ public interface IKmsServer : IDisposable
     ValueTask<Seq<Concept>> GetOwners(ConceptId id);
 
     ValueTask<Concept> Update(Concept concept);
+
+    ValueTask RecordUpTime();
 }
 
 public sealed partial class KmsServer : IKmsServer
 {
     readonly ILogger logger;
     readonly IKmsDatabase db;
+    readonly DateTime startTime = DateTime.UtcNow;
     Task<State> snapshot;
     readonly BlockingCollection<TransactionTask> inbox = new();
     readonly ManualResetEventSlim inboxQuit = new();
@@ -87,8 +90,8 @@ public sealed partial class KmsServer : IKmsServer
         await using var searchConceptSession = db.Session();
         await using var searchLinkSession = db.Session();
         var searchKeyword = $"*{SanitizeSearchKeyword(keyword)}*";
-        var result = await Task.WhenAll(searchConceptSession.SearchByConceptName(searchKeyword, maxResult),
-                                              searchLinkSession.SearchByLinkName(searchKeyword, maxResult));
+        var result = await Task.WhenAll(searchConceptSession.SearchByConceptName(searchKeyword, maxResult).AsTask(),
+                                        searchLinkSession.SearchByLinkName(searchKeyword, maxResult).AsTask());
         return Seq(from c in result.ToSeq().Flatten()
                    group c.Score by c.Id into g
                    select (g.Key, g.Max()));
@@ -133,6 +136,9 @@ public sealed partial class KmsServer : IKmsServer
         await using var session = db.Session();
         return await Transact(Operations.Update(session, current, concept));
     }
+
+    public ValueTask RecordUpTime() => 
+        db.Session().RecordUpTime(startTime);
 
     /// <summary>
     /// Assume that Concept IDs in <paramref name="ids"/> are all valid!

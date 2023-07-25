@@ -3,7 +3,6 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
 using Tirax.KMS.Domain;
-using Tirax.KMS.Extensions;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 using Seq = LanguageExt.Seq;
 
@@ -107,7 +106,7 @@ WHERE elementId(owner) = $oid
 CREATE (link:LinkObject { name: $name, uri: $uri }), (owner)-[:REFERS]->(link)
 RETURN link
 """;
-        var result = await Query(q, Materialization.ToLinkObject, new{ oid = ownerId.Value, name = name.GetOrDefault(), uri = uri.Value });
+        var result = await Query(q, Materialization.ToLinkObject, new{ oid = ownerId.Value, name = name.ToNullable(), uri = uri.Value });
         return result.Single();
     }
 
@@ -139,16 +138,16 @@ RETURN concept, [] AS contains, [] AS links, [] AS tags
               Materialization.ToLinkObject,
               linkIds);
 
-    public Task<Seq<ConceptTag>> GetTags() =>
+    public ValueTask<Seq<ConceptTag>> GetTags() =>
         Query("MATCH (tag:Tag) RETURN tag", Materialization.ToConceptTag);
     
-    public async Task<Concept> GetHome() {
+    public async ValueTask<Concept> GetHome() {
         const string q = "MATCH (t:Bookmark { label: 'home' })-[:POINT]->(concept:Concept) " + ConceptReturn;
         var result = await Query(q, Materialization.ToConcept);
         return result.Single();
     }
 
-    public Task<Seq<ConceptId>> FetchOwners(ConceptId conceptId) {
+    public ValueTask<Seq<ConceptId>> FetchOwners(ConceptId conceptId) {
         const string q = """
 MATCH (owner:Concept)-[:CONTAINS]->(concept:Concept)
 WHERE elementId(concept) = $cid
@@ -159,7 +158,7 @@ RETURN elementId(owner) AS id
     
     #region Keyword search
 
-    public Task<Seq<(ConceptId Id, float Score)>> SearchByConceptName(string name, int maxResult) {
+    public ValueTask<Seq<(ConceptId Id, float Score)>> SearchByConceptName(string name, int maxResult) {
         const string q = """
 CALL db.index.fulltext.queryNodes("conceptNameIndex", $name) YIELD node, score
 WITH node AS concept, score
@@ -169,7 +168,7 @@ LIMIT $maxResult
         return Query(q, Materialization.ToSearchConceptResult, new{ name, maxResult });
     }
     
-    public Task<Seq<(ConceptId Id, float Score)>> SearchByLinkName(string name, int maxResult) {
+    public ValueTask<Seq<(ConceptId Id, float Score)>> SearchByLinkName(string name, int maxResult) {
         const string q = """
 CALL db.index.fulltext.queryNodes("linkObjectNameIndex", $name) YIELD node, score
 WITH node AS link, score
@@ -197,6 +196,16 @@ LIMIT $maxResult
         return @new;
     }
 
+    public async ValueTask RecordUpTime(DateTime startTime) {
+        const string q = """
+MERGE (t:Bookmark { label: 'uptime' })
+ON CREATE SET t.startTime = $startTime, t.uptime = $uptime
+ON MATCH SET t.startTime = $startTime, t.uptime = $uptime
+""";
+        var uptime = DateTime.UtcNow - startTime;
+        await session.RunAsync(q, new{ startTime, uptime });
+    }
+
     async Task<(Seq<T> Result, Seq<ConceptId> Invalids)> Fetch<T>(string q, Func<IRecord, T> mapper, Seq<ConceptId> ids) where T : IDomainObject {
         if (ids.IsEmpty)
             return (Seq.empty<T>(), ids);
@@ -205,10 +214,10 @@ LIMIT $maxResult
         return (result, invalids);
     }
 
-    Task<Seq<T>> Query<T>(string query, Func<IRecord, T> mapper, object? parameters = null) =>
+    ValueTask<Seq<T>> Query<T>(string query, Func<IRecord, T> mapper, object? parameters = null) =>
         Query(session, query, mapper, parameters);
 
-    async Task<Seq<T>> Query<T>(IAsyncQueryRunner runner, string query, Func<IRecord,T> mapper, object? parameters = null) {
+    async ValueTask<Seq<T>> Query<T>(IAsyncQueryRunner runner, string query, Func<IRecord, T> mapper, object? parameters = null) {
         var records = await (parameters is null ? runner.RunAsync(query) : runner.RunAsync(query, parameters));
         var result = await records.Map(mapper).ToArrayAsync();
         logger.LogDebug("Query {Query}, got {Count} result", query, result.Length);

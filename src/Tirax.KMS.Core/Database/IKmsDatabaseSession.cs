@@ -16,12 +16,14 @@ public interface IKmsDatabaseSession : IAsyncDisposable
     Task<(Seq<Concept> Result, Seq<ConceptId> Invalids)> FetchConcepts(Seq<ConceptId> conceptIds);
     Task<(Seq<LinkObject> Result, Seq<ConceptId> Invalids)> FetchLinkObjects(Seq<ConceptId> linkIds);
     
-    Task<Seq<ConceptTag>> GetTags();
-    Task<Concept> GetHome();
-    Task<Seq<ConceptId>> FetchOwners(ConceptId conceptId);
+    ValueTask<Seq<ConceptTag>> GetTags();
+    ValueTask<Concept> GetHome();
+    ValueTask<Seq<ConceptId>> FetchOwners(ConceptId conceptId);
 
-    Task<Seq<(ConceptId Id, float Score)>> SearchByConceptName(string name, int maxResult);
-    Task<Seq<(ConceptId Id, float Score)>> SearchByLinkName(string name, int maxResult);
+    ValueTask<Seq<(ConceptId Id, float Score)>> SearchByConceptName(string name, int maxResult);
+    ValueTask<Seq<(ConceptId Id, float Score)>> SearchByLinkName(string name, int maxResult);
 
     Task<Concept> Update(Concept old, Concept @new);
+
+    ValueTask RecordUpTime(DateTime startTime);
 }
