@@ -14,7 +14,7 @@ public static class DialogExtensions
         var opts = options ?? new DialogOptions{ FullWidth = true, MaxWidth = MaxWidth.Medium };
         var d = await dialog.ShowAsync<T>(title, opts);
         var result = await d.Result;
-        return result.Canceled? None : Some(result.Data.As<R>());
+        return (result.Canceled? None : Some(result.Data.As<R>()))!;
     }
     
 }
