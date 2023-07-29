@@ -1,15 +1,21 @@
 ﻿@using Tirax.KMS.Domain
+@using System.Security.Claims
+@using Tirax.KMS.Authentication
 @inherits ReactiveComponentBase<AppModel.ViewModel>
 @inject NavigationManager NavigationManager
 @inject IKmsServer Server
 @inject AppModel.ViewModel AppModel
+@inject AuthenticationStateProvider AuthState
 
 <MudAppBar Elevation="1">
     <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                    OnClick="ToggleIsOpen" />
     
-    <MudLink Typo="Typo.h5" Color="Color.Surface" Underline="Underline.None" Class="mx-3" 
-             OnClick="GoHome">Tirax KMS</MudLink>
+    <MudStack Spacing="0" Class="mx-3" >
+        <MudLink Typo="Typo.h5" Color="Color.Surface" Underline="Underline.None"
+                 OnClick="GoHome">Tirax KMS</MudLink>
+        <MudText Typo="Typo.caption">@App.Version</MudText>
+    </MudStack>
     
     <AuthorizeView Policy="@KmsAuthPolicy.User">
         <MudAutocomplete T="SearchItem" Label="Search" SelectOnClick="true" Variant="Variant.Outlined"
@@ -22,15 +28,23 @@
                          ValueChanged="item => ViewModel!.CurrentTopic = item.Concept.Id">
             <ItemTemplate Context="item"><MudText>@item.Text</MudText></ItemTemplate>
         </MudAutocomplete>
+        
+        <div class="ml-3 name-plate">@user.UserName()</div>
     </AuthorizeView>
 </MudAppBar>
 
 @code {
 
+    ClaimsPrincipal user = new (new ClaimsIdentity());
+
     sealed record SearchItem(string Text, Concept Concept);
 
     protected override void OnInitialized() {
         ViewModel = AppModel;
+    }
+
+    protected override async Task OnInitializedAsync() {
+        user = (await AuthState.GetAuthenticationStateAsync()).User;
     }
 
     async Task<IEnumerable<SearchItem>> Search(string s, CancellationToken ct) =>
