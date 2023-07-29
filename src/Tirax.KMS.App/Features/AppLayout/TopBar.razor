@@ -8,8 +8,11 @@
     <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                    OnClick="ToggleIsOpen" />
     
-    <MudLink Typo="Typo.h5" Color="Color.Surface" Underline="Underline.None" Class="mx-3" 
-             OnClick="GoHome">Tirax KMS</MudLink>
+    <MudStack Spacing="0" Class="mx-3" >
+        <MudLink Typo="Typo.h5" Color="Color.Surface" Underline="Underline.None"
+                 OnClick="GoHome">Tirax KMS</MudLink>
+        <MudText Typo="Typo.caption">@App.Version</MudText>
+    </MudStack>
     
     <AuthorizeView Policy="@KmsAuthPolicy.User">
         <MudAutocomplete T="SearchItem" Label="Search" SelectOnClick="true" Variant="Variant.Outlined"
