@@ -1,4 +1,4 @@
-﻿namespace Tirax.KMS.Migration.Utils;
+﻿namespace Tirax.KMS.Migration.Core;
 
 public readonly record struct SemVer(int Major, int Minor, int Revision)
 {
@@ -21,5 +21,5 @@ public interface IMigration
     ValueTask Down();
     
     string Name { get; }
-    SemVer Version { get; }
+    Version Version { get; }
 }
