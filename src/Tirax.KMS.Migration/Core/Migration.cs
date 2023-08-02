@@ -20,13 +20,9 @@ public sealed class Migration
         GetMigrationTypes().Iter(t => serviceCollection.AddSingleton(typeof(IMigration), t));
         
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var migrations = serviceProvider.GetServices<IMigration>().OrderBy(m => m.Version).ToSeq();
-        
-        Console.WriteLine($"{migrations.Count()} total migrations.");
-        Console.WriteLine();
-        Console.WriteLine("Migrating to version: ...");
+        var migrations = serviceProvider.GetServices<IMigrationStage>();
 
-        foreach (var m in migrations) await m.Up();
+        await Task.WhenAll(migrations.Map(m => m.Run(version).AsTask()));
     }
 
     static Seq<Type> GetMigrationTypes() {
