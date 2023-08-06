@@ -1,4 +1,6 @@
-﻿namespace Tirax.KMS.Migration.Core;
+﻿using Neo4j.Driver;
+
+namespace Tirax.KMS.Migration.Core;
 
 public interface INeo4JDatabase
 {
@@ -13,4 +15,7 @@ public interface INeo4JDatabase
 
     ValueTask CreateNode(Neo4JNode node, params LinkTarget[] targets);
     ValueTask DeleteNodes(params Neo4JNode[] nodes);
+
+    ValueTask<IResultCursor> Query(string query, object? parameters = null);
+    ValueTask Execute(string query, object? parameters = null);
 }

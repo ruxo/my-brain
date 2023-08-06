@@ -2,41 +2,9 @@
 using System.Text;
 using Neo4j.Driver;
 using Tirax.KMS.Database;
-using Seq = LanguageExt.Seq;
+using Tirax.KMS.Migration.Core.Query;
 
 namespace Tirax.KMS.Migration.Core;
-
-#region Neo4J native objects
-
-public readonly record struct Neo4JLink(string LinkType, Neo4JProperties Body)
-{
-    public static implicit operator Neo4JLink(string linkType) => new(linkType, new(Seq.empty<Neo4JProperty>()));
-}
-
-public readonly record struct LinkTarget(Neo4JLink Link, Neo4JNode Target);
-
-public readonly record struct Neo4JNode(string NodeType, Neo4JProperties Body);
-
-public readonly record struct Neo4JProperty(string Name, string Value)
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Neo4JProperty((string name, string value) property) => new(property.name, property.value);
-}
-
-public readonly record struct Neo4JProperties(Seq<Neo4JProperty> Properties)
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Neo4JProperties(Seq<Neo4JProperty> properties) => new(properties);
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Neo4JProperties(Seq<(string name, string value)> properties) => new(properties.Map(i => (Neo4JProperty)i));
-}
-
-public readonly record struct NodeFields(Seq<string> Fields)
-{
-    public static implicit operator NodeFields(Seq<string> fields) => new(fields);
-    public static implicit operator NodeFields(string field) => new(Seq1(field));
-}
 
 static class StringBuilderExtension
 {
@@ -47,7 +15,7 @@ static class StringBuilderExtension
     public static StringBuilder Add(this StringBuilder sb, char c) => sb.Append(c);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static StringBuilder Add(this StringBuilder sb, string s) => sb.Append(s);
+    public static StringBuilder Add(this StringBuilder sb, string s) => string.IsNullOrEmpty(s)? sb : sb.Append(s);
 
     public static StringBuilder Join<T>(this StringBuilder sb, char delimiter, in Seq<T> seq, Func<StringBuilder,T,StringBuilder> mapper) =>
         seq.Tail.Fold(mapper(sb,seq.Head), (inner, i) => mapper(inner.Add(delimiter),i));
@@ -55,8 +23,8 @@ static class StringBuilderExtension
     public static StringBuilder Add(this StringBuilder sb, NodeFields nodeFields, string nodeName = "x") => 
         sb.Join(',', nodeFields.Fields, (inner, field) => inner.Add(nodeName).Add(PropertyDelimiter).Add(field));
 
-    public static StringBuilder Add(this StringBuilder sb, Neo4JProperty property) => 
-        sb.Add(property.Name).Add(PropertyDelimiter).Add('\'').Add(property.Value.Replace("'", "\\'")).Add('\'');
+    public static StringBuilder Add(this StringBuilder sb, Neo4JProperty property) =>
+        sb.Add(property.Name).Add(PropertyDelimiter).AddQuotedString(property.Value);
 
     public static StringBuilder Add(this StringBuilder sb, Neo4JProperties properties) =>
         properties.Properties.HeadOrNone()
@@ -78,9 +46,17 @@ static class StringBuilderExtension
 
     public static StringBuilder AddDeleteExpression(this StringBuilder sb, Neo4JNode node) =>
         sb.Add("MATCH ").Add(node, "x").Add(" DETACH DELETE x;");
-}
 
-#endregion
+    public static StringBuilder AddQuotedString(this StringBuilder sb, string s) {
+        sb.Add('\'');
+        foreach(var c in s)
+            if (c == '\'')
+                sb.Append("\\'");
+            else
+                sb.Add(c);
+        return sb.Add('\'');
+    }
+}
 
 public sealed class Neo4JDatabase : INeo4JDatabase, IAsyncDisposable, IDisposable
 {
@@ -132,6 +108,13 @@ public sealed class Neo4JDatabase : INeo4JDatabase, IAsyncDisposable, IDisposabl
         nodes.Iter(node => sb.AddDeleteExpression(node).AppendLine());
         await session.RunAsync(sb.ToString());
     }
+
+    public async ValueTask<IResultCursor> Query(string query, object? parameters = null) => 
+        await (parameters is null ? session.RunAsync(query) : session.RunAsync(query, parameters));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public async ValueTask Execute(string query, object? parameters = null) => 
+        await (await Query(query, parameters)).ConsumeAsync();
 
     public async ValueTask DisposeAsync() {
         await session.DisposeAsync();

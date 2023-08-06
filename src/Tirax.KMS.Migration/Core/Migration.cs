@@ -16,6 +16,7 @@ public sealed class Migration
         
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddSingleton<INeo4JDatabase>(_ => CreateNeo4JDatabase(config));
+        serviceCollection.AddSingleton<IMigrationStage, Neo4JMigrationStage>();
         
         GetMigrationTypes().Iter(t => serviceCollection.AddSingleton(typeof(IMigration), t));
         
