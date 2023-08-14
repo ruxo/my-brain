@@ -15,14 +15,31 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         var migrationHistory = await LoadLatestMigration();
         var targetVersionText = targetVersion.Map(v => v.ToString()).IfNone("latest");
 
-        var toMigrate = migrations.OrderBy(m => m.Version);
+        var toMigrate = Seq(migrations.OrderBy(m => m.Version));
+        var toMigrateVersion = targetVersion.IfNone(toMigrate.Last().Version);
+
+        if (toMigrate.All(m => m.Version != toMigrateVersion)) {
+            Console.WriteLine($"Target version {toMigrateVersion} is not valid");
+            Console.Write("Valid versions:");
+            toMigrate.Iter(m => Console.WriteLine($"\t{m.Version}"));
+            return;
+        }
         
         if (migrationHistory.Latest.IfSome(out var latest)) {
-            var word = latest.Version > targetVersion ? "Downgrade" : "Upgrade";
-            if (latest.Version == targetVersion)
+            if (latest.Version == toMigrateVersion)
                 Console.WriteLine($"Latest migration is already at version: {targetVersionText}");
-            else
+            else {
+                var isUpgrading = latest.Version < toMigrateVersion;
+                var word = isUpgrading? "Upgrade" : "Downgrade";
                 Console.WriteLine($"{word} to version: {targetVersionText}");
+                if (isUpgrading)
+                    foreach(var migration in toMigrate.Where(m => m.Version > latest.Version))
+                        migrationHistory = await Upgrade(migrationHistory, migration);
+                else
+                    foreach(var migration in toMigrate.Where(m => m.Version > toMigrateVersion && m.Version <= latest.Version)
+                                                      .OrderByDescending(m => m.Version))
+                        migrationHistory = await Downgrade(migrationHistory, migration);
+            }
         }
         else {
             Console.WriteLine($"Initialize to version: {targetVersionText}");
@@ -41,6 +58,10 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         var cursor = await db.Query(query);
         var record = await cursor.TryFirst();
         return record.Map(r => Extract(r.GetPath(ResultVar))).IfNone(new MigrationInfo());
+    }
+
+    ValueTask<MigrationInfo> Downgrade(MigrationInfo history, IMigration migration) {
+        throw new NotImplementedException();
     }
 
     async ValueTask<MigrationInfo> Upgrade(MigrationInfo history, IMigration migration) {
@@ -68,10 +89,10 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
     readonly record struct MigrationRecord(Guid Id, Version Version, string Name, DateTime Updated)
     {
         public static MigrationRecord From(INode node) =>
-            new(Guid.Parse(node.As<string>("id")),
-                Version.Parse(node.As<string>("version")),
-                node.As<string>("name"),
-                DateTime.Parse(node.As<string>("updated")));
+            new(Guid.Parse((string)node["id"]),
+                Version.Parse(node["version"].As<string>()),
+                node["name"].As<string>(),
+                DateTime.Parse(node["updated"].As<string>()));
 
         public Neo4JNode ToNeo4JNode() =>
             Neo4JNode.Of("Migration",
