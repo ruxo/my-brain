@@ -17,5 +17,5 @@ public interface INeo4JDatabase
     ValueTask DeleteNodes(params Neo4JNode[] nodes);
 
     ValueTask<IResultCursor> Query(string query, object? parameters = null);
-    ValueTask Execute(string query, object? parameters = null);
+    ValueTask<IResultSummary> Execute(string query, object? parameters = null);
 }
