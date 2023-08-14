@@ -2,6 +2,7 @@
 using System.Text;
 using Neo4j.Driver;
 using Tirax.KMS.Database;
+using Tirax.KMS.Migration.Core.Query;
 
 namespace Tirax.KMS.Migration.Core;
 
@@ -42,20 +43,22 @@ static class StringBuilderExtension
                    })
                   .IfNone(sb);
 
-    public static StringBuilder Add(this StringBuilder sb, Neo4JNode node, string name = "") {
-        sb.Add('(').Add(name).Add(NodeTypeDelimiter);
-        if (node.NodeType is not null) sb.Add(node.NodeType);
+    public static StringBuilder Add(this StringBuilder sb, Neo4JNode node) {
+        sb.Add('(').Add(node.Id ?? string.Empty);
+        if (node.NodeType is not null) sb.Add(NodeTypeDelimiter).Add(node.NodeType);
         return sb.Add(node.Body).Add(')');
     }
 
     public static StringBuilder Add(this StringBuilder sb, Neo4JLink link) => 
-        sb.Add("[").Add(link.LinkType).Add(' ').Add(link.Body).Add(']');
+        sb.Add('[').Add(NodeTypeDelimiter).Add(link.LinkType).Add(link.Body).Add(']');
 
     public static StringBuilder Add(this StringBuilder sb, Seq<LinkTarget> targets) => 
         targets.Fold(sb, (inner, target) => inner.Add('-').Add(target.Link).Add("->").Add(target.Target));
 
-    public static StringBuilder AddDeleteExpression(this StringBuilder sb, Neo4JNode node) =>
-        sb.Add("MATCH ").Add(node, "x").Add(" DETACH DELETE x;");
+    public static StringBuilder AddDeleteExpression(this StringBuilder sb, Neo4JNode node) {
+        var validNode = node.Id is null ? node with{ Id = "x" } : node;
+        return sb.Add("MATCH ").Add(validNode).Add(" DETACH DELETE ").Add(node.Id!.Value).Add(Cypher.CommandTerminationDelimiter);
+    }
 
     public static StringBuilder AddQuotedString(this StringBuilder sb, string s) {
         sb.Add('\'');
@@ -109,7 +112,8 @@ public sealed class Neo4JDatabase : INeo4JDatabase, IAsyncDisposable, IDisposabl
     }
 
     public async ValueTask CreateNode(Neo4JNode node, params LinkTarget[] targets) {
-        var query = new StringBuilder().Add("CREATE ").Add(node).Add(targets.ToSeq()).ToString();
+        var n = new CreateNode(node, targets.ToSeq());
+        var query = n.ToCommandString(new (128)).ToString();
         await session.RunAsync(query);
     }
 

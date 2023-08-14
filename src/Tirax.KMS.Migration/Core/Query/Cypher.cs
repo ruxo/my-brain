@@ -34,13 +34,12 @@ public static class Cypher
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReturnBuilder Returns(ProjectionNode projection) => new(nodes.Add(projection));
 
-        public MergeBuilder Create(Neo4JNode node, params LinkTarget[] targets) => new(nodes.Add(new CreateNode(node, Seq(targets))));
+        public MergeBuilder Create(Neo4JNode node, params LinkTarget[] targets) =>
+            new(nodes.Add(new CreateNode(node, Seq(targets))));
 
-        public static implicit operator string(MergeBuilder builder) {
-            var sb = new StringBuilder(256);
-            builder.Nodes.Iter(n => n.ToCommandString(sb));
-            return sb.ToString();
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static implicit operator string(MergeBuilder builder) => 
+            new StringBuilder(256).Add(builder.Nodes).Add(CommandTerminationDelimiter).ToString();
     }
 
     public readonly record struct ReturnBuilder(Seq<ICypherNode> Commands)
@@ -53,7 +52,7 @@ public static class Cypher
 
         public static implicit operator string(ReturnBuilder builder) {
             var sb = new StringBuilder(256);
-            sb.Join(builder.Commands, (inner, n) => n.ToCommandString(inner), (inner, _) => inner.NewLine());
+            sb.Add(builder.Commands);
             builder.orderBy.Iter(x => x.ToCommandString(sb.NewLine()));
             builder.limit.Iter(i => sb.NewLine().Append("LIMIT ").Append(i));
             return sb.Add(CommandTerminationDelimiter).ToString();
@@ -63,6 +62,10 @@ public static class Cypher
 
 static class CypherStringBuilderExtension
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StringBuilder Add(this StringBuilder sb, Seq<ICypherNode> nodes) => 
+        sb.Join(nodes, (inner, n) => n.ToCommandString(inner), (inner, _) => inner.NewLine());
+
     public static StringBuilder Add(this StringBuilder sb, QueryNode node, string enclosing = "()") {
         Debug.Assert(enclosing.Length == 2);
         sb.Add(enclosing[0]);
