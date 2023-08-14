@@ -2,7 +2,6 @@
 using System.Text;
 using Neo4j.Driver;
 using Tirax.KMS.Database;
-using Tirax.KMS.Migration.Core.Query;
 
 namespace Tirax.KMS.Migration.Core;
 
@@ -10,6 +9,9 @@ static class StringBuilderExtension
 {
     const char PropertyDelimiter = '.';
     const char NodeTypeDelimiter = ':';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StringBuilder NewLine(this StringBuilder sb) => sb.Append('\n');
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static StringBuilder Add(this StringBuilder sb, char c) => sb.Append(c);
@@ -17,26 +19,34 @@ static class StringBuilderExtension
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static StringBuilder Add(this StringBuilder sb, string s) => string.IsNullOrEmpty(s)? sb : sb.Append(s);
 
-    public static StringBuilder Join<T>(this StringBuilder sb, char delimiter, in Seq<T> seq, Func<StringBuilder,T,StringBuilder> mapper) =>
-        seq.Tail.Fold(mapper(sb,seq.Head), (inner, i) => mapper(inner.Add(delimiter),i));
+    public delegate StringBuilder Transformer<in T>(StringBuilder sb, T value);
+
+    public static StringBuilder Join<T>(this StringBuilder sb, Seq<T> seq, Transformer<T> mapper, Transformer<T> joiner) =>
+        seq.HeadOrNone().Map(head => seq.Tail.Fold(mapper(sb,head), (inner, i) => mapper(joiner(inner,i), i))).IfNone(sb);
+
+    public static StringBuilder Join<T>(this StringBuilder sb, char delimiter, Seq<T> seq, Transformer<T> mapper) =>
+        seq.HeadOrNone().Map(head => seq.Tail.Fold(mapper(sb,head), (inner, i) => mapper(inner.Add(delimiter),i))).IfNone(sb);
 
     public static StringBuilder Add(this StringBuilder sb, NodeFields nodeFields, string nodeName = "x") => 
         sb.Join(',', nodeFields.Fields, (inner, field) => inner.Add(nodeName).Add(PropertyDelimiter).Add(field));
 
-    public static StringBuilder Add(this StringBuilder sb, Neo4JProperty property) =>
-        sb.Add(property.Name).Add(PropertyDelimiter).AddQuotedString(property.Value);
+    public static StringBuilder Add(this StringBuilder sb, Neo4JProperty property, char delimiter = PropertyDelimiter) =>
+        sb.Add(property.Name).Add(delimiter).AddQuotedString(property.Value);
 
     public static StringBuilder Add(this StringBuilder sb, Neo4JProperties properties) =>
         properties.Properties.HeadOrNone()
                   .Map(head => {
-                       sb.Add('{').Add(head);
-                       properties.Properties.Tail.Iter(item => sb.Add(',').Add(item));
+                       sb.Add('{').Add(head, NodeTypeDelimiter);
+                       properties.Properties.Tail.Iter(item => sb.Add(',').Add(item, NodeTypeDelimiter));
                        return sb.Add('}');
                    })
                   .IfNone(sb);
 
-    public static StringBuilder Add(this StringBuilder sb, Neo4JNode node, string name = "") => 
-        sb.Add('(').Add(name).Add(NodeTypeDelimiter).Add(node.NodeType).Add(' ').Add(node.Body).Add(')');
+    public static StringBuilder Add(this StringBuilder sb, Neo4JNode node, string name = "") {
+        sb.Add('(').Add(name).Add(NodeTypeDelimiter);
+        if (node.NodeType is not null) sb.Add(node.NodeType);
+        return sb.Add(node.Body).Add(')');
+    }
 
     public static StringBuilder Add(this StringBuilder sb, Neo4JLink link) => 
         sb.Add("[").Add(link.LinkType).Add(' ').Add(link.Body).Add(']');
@@ -105,7 +115,7 @@ public sealed class Neo4JDatabase : INeo4JDatabase, IAsyncDisposable, IDisposabl
 
     public async ValueTask DeleteNodes(params Neo4JNode[] nodes) {
         var sb = new StringBuilder();
-        nodes.Iter(node => sb.AddDeleteExpression(node).AppendLine());
+        nodes.Iter(node => sb.AddDeleteExpression(node).NewLine());
         await session.RunAsync(sb.ToString());
     }
 

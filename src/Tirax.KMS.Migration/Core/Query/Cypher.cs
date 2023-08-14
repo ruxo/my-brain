@@ -11,6 +11,8 @@ public interface ICypherNode
 
 public static class Cypher
 {
+    public const char CommandTerminationDelimiter = ';';
+    
     /// <summary>
     /// Create or update the node
     /// </summary>
@@ -51,10 +53,10 @@ public static class Cypher
 
         public static implicit operator string(ReturnBuilder builder) {
             var sb = new StringBuilder(256);
-            builder.Commands.Iter(c => c.ToCommandString(sb));
-            builder.orderBy.Iter(x => x.ToCommandString(sb));
-            builder.limit.Iter(i => sb.Append("LIMIT ").Append(i).AppendLine());
-            return sb.ToString();
+            sb.Join(builder.Commands, (inner, n) => n.ToCommandString(inner), (inner, _) => inner.NewLine());
+            builder.orderBy.Iter(x => x.ToCommandString(sb.NewLine()));
+            builder.limit.Iter(i => sb.NewLine().Append("LIMIT ").Append(i));
+            return sb.Add(CommandTerminationDelimiter).ToString();
         }
     }
 }
@@ -64,6 +66,7 @@ static class CypherStringBuilderExtension
     public static StringBuilder Add(this StringBuilder sb, QueryNode node, string enclosing = "()") {
         Debug.Assert(enclosing.Length == 2);
         sb.Add(enclosing[0]);
+        node.Id.Iter(id => sb.Append(id));
         node.LabelExpression.Iter(term => sb.Add(':').Add(term));
         sb.Add(node.Body);
         node.WhereExpression.Iter(term => sb.Append(" WHERE ").Add(term));

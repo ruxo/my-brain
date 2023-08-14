@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using Neo4j.Driver;
 using Tirax.KMS.Migration.Core.Query;
-using RZ.Foundation.Extensions;
 using Seq = LanguageExt.Seq;
 
 namespace Tirax.KMS.Migration.Core;
@@ -57,7 +56,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         else
             await db.CreateNode(Neo4JNode.Of("Bookmark", ("label", "migration")),
                                 new LinkTarget("MIGRATE", target));
-        return history with{ Migrations = history.Migrations.Add(newMigration) };
+        return new(history.Migrations.Add(newMigration));
     }
 
     static MigrationInfo Extract(IPath p) {
