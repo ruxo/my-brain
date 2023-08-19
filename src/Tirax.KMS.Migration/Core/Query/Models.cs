@@ -22,7 +22,7 @@ public record LabelTerm
 
 public record ValueTerm
 {
-    public sealed record Constant(string Value) : ValueTerm;
+    public sealed record Constant(object Value) : ValueTerm;
     public sealed record Variable(string Name) : ValueTerm;
     public sealed record Property(string NodeId, string Field) : ValueTerm;
 
@@ -33,6 +33,12 @@ public record ValueTerm
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ValueTerm(string variable) => new Variable(variable);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator ValueTerm(int value) => new Constant(value);
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator ValueTerm(in (string nodeId, string field) x) => new Property(x.nodeId, x.field);
     
     ValueTerm() {}
 }
@@ -52,6 +58,12 @@ public record BooleanTerm
     public sealed record Not(BooleanTerm Expr) : BooleanTerm;
     
     BooleanTerm(){}
+}
+
+public readonly record struct AssignmentTerm(ValueTerm Left, ValueTerm Right)
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator AssignmentTerm(in (ValueTerm Left, ValueTerm Right) x) => new(x.Left, x.Right);
 }
 
 public record ProjectionTerm

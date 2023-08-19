@@ -50,7 +50,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
 
     async ValueTask<MigrationInfo> LoadLatestMigration() {
         const string ResultVar = "p";
-        var bookmark = QueryNode.Of("Bookmark", ("label", "migration"));
+        var bookmark = QueryNode.Of("Bookmark", ("label", "migration"), ("latest", true));
         string query = Cypher.Match(bookmark.LinkTo("MIGRATE", QueryNode.Any, Qualifier.Any).ToPath(ResultVar))
                              .Returns(ResultVar)
                              .OrderBy(ResultOrderBy.Desc(ValueTerm.FunctionCall.Of("length", ResultVar)))
@@ -69,43 +69,48 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
 
         var newMigration = new MigrationRecord(Guid.NewGuid(), migration.Version, migration.Name, DateTime.UtcNow);
         var target = newMigration.ToNeo4JNode();
+        var version = history.Version + 1;
         if (history.Latest.IfSome(out var latest)) {
-            string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", latest.Id.ToString())))
+            string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", latest.Id.ToString()), ("latest", true)))
+                                 .Set((("n", "version"), version))
                                  .Create(Neo4JNode.Of(id: "n"), new LinkTarget("MIGRATE", target));
             await db.Execute(query);
         }
         else
-            await db.CreateNode(Neo4JNode.Of("Bookmark", ("label", "migration")),
+            await db.CreateNode(Neo4JNode.Of("Bookmark", ("label", "migration"), ("latest", true), ("version", version)),
                                 new LinkTarget("MIGRATE", target));
-        return new(history.Migrations.Add(newMigration));
+        return new(version, history.Migrations.Add(newMigration));
     }
 
     static MigrationInfo Extract(IPath p) {
         var path = p.EnumerateNodes();
         Debug.Assert(path.Head.Labels.Contains("Bookmark"));
-        return new(path.Tail.Map(MigrationRecord.From));
+        var version = path.Head["version"].As<int>();
+        return new(version, path.Tail.Map(MigrationRecord.From));
     }
 
-    readonly record struct MigrationRecord(Guid Id, Version Version, string Name, DateTime Updated)
+    readonly record struct MigrationRecord(Guid Id, Version Version, string Name, DateTime Updated, DateTime? Downgraded = null)
     {
         public static MigrationRecord From(INode node) =>
             new(Guid.Parse((string)node["id"]),
                 Version.Parse(node["version"].As<string>()),
                 node["name"].As<string>(),
-                DateTime.Parse(node["updated"].As<string>()));
+                DateTime.Parse(node["updated"].As<string>()),
+                Optional(node["downgraded"].As<string?>()).Map(DateTime.Parse).ToNullable());
 
         public Neo4JNode ToNeo4JNode() =>
             Neo4JNode.Of("Migration",
                          ("id", Id.ToString()),
                          ("version", Version.ToString()),
                          ("name", Name),
-                         ("updated", Updated.ToString("O")));
+                         ("updated", Updated.ToString("O")),
+                         ("downgraded", Downgraded?.ToString("O")));
     }
 
-    sealed record MigrationInfo(Seq<MigrationRecord> Migrations)
+    sealed record MigrationInfo(int Version, Seq<MigrationRecord> Migrations)
     {
         public Option<MigrationRecord> Latest => Migrations.LastOrNone();
         
-        public MigrationInfo() : this(Seq.empty<MigrationRecord>()){}
+        public MigrationInfo() : this(0, Seq.empty<MigrationRecord>()){}
     }
 }

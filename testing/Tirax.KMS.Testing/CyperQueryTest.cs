@@ -33,4 +33,11 @@ public sealed class CyperQueryTest
         const string Expected = "MATCH (n:Migration{id:'1234'})\nCREATE (n)-[:MIGRATE]->(:Migration{id:'5678'});";
         query.Should().Be(Expected, $"value not match: `{query}`");
     }
+
+    [Fact]
+    public void SimpleMatchAndSet() {
+        string query = Cypher.Match(QueryNode.Of("Migration", "n")).Set((("n", "version"), 123));
+
+        query.Should().Be("MATCH (n:Migration)\nSET n.version=123;", $"value not match: `{query}`");
+    }
 }

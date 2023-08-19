@@ -37,6 +37,9 @@ public static class Cypher
         public MergeBuilder Create(Neo4JNode node, params LinkTarget[] targets) =>
             new(nodes.Add(new CreateNode(node, Seq(targets))));
 
+        public MergeBuilder Set(params AssignmentTerm[] assignments) =>
+            new(nodes.Add(new MatchSetNode(assignments.ToSeq())));
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator string(MergeBuilder builder) => 
             new StringBuilder(256).Add(builder.Nodes).Add(CommandTerminationDelimiter).ToString();
@@ -62,6 +65,78 @@ public static class Cypher
 
 static class CypherStringBuilderExtension
 {
+    const char PropertyDelimiter = '.';
+    const char NodeTypeDelimiter = ':';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StringBuilder NewLine(this StringBuilder sb) => sb.Append('\n');
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StringBuilder Add(this StringBuilder sb, char c) => sb.Append(c);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StringBuilder Add(this StringBuilder sb, string s) => string.IsNullOrEmpty(s)? sb : sb.Append(s);
+
+    public delegate StringBuilder Transformer<in T>(StringBuilder sb, T value);
+
+    public static StringBuilder Join<T>(this StringBuilder sb, Seq<T> seq, Transformer<T> mapper, Transformer<T> joiner) =>
+        seq.HeadOrNone().Map(head => seq.Tail.Fold(mapper(sb,head), (inner, i) => mapper(joiner(inner,i), i))).IfNone(sb);
+
+    public static StringBuilder Join<T>(this StringBuilder sb, char delimiter, Seq<T> seq, Transformer<T> mapper) =>
+        seq.HeadOrNone().Map(head => seq.Tail.Fold(mapper(sb,head), (inner, i) => mapper(inner.Add(delimiter),i))).IfNone(sb);
+
+    public static StringBuilder Add(this StringBuilder sb, NodeFields nodeFields, string nodeName = "x") => 
+        sb.Join(',', nodeFields.Fields, (inner, field) => inner.Add(nodeName).Add(PropertyDelimiter).Add(field));
+
+    public static StringBuilder Add(this StringBuilder sb, Neo4JProperty property, char delimiter = PropertyDelimiter) =>
+        sb.Add(property.Name).Add(delimiter).AddValue(property.Value);
+
+    public static StringBuilder Add(this StringBuilder sb, Neo4JProperties properties) =>
+        properties.Properties.HeadOrNone()
+                  .Map(head => {
+                       sb.Add('{').Add(head, NodeTypeDelimiter);
+                       properties.Properties.Tail.Iter(item => sb.Add(',').Add(item, NodeTypeDelimiter));
+                       return sb.Add('}');
+                   })
+                  .IfNone(sb);
+
+    public static StringBuilder Add(this StringBuilder sb, Neo4JNode node) {
+        sb.Add('(').Add(node.Id ?? string.Empty);
+        if (node.NodeType is not null) sb.Add(NodeTypeDelimiter).Add(node.NodeType);
+        return sb.Add(node.Body).Add(')');
+    }
+
+    public static StringBuilder Add(this StringBuilder sb, Neo4JLink link) => 
+        sb.Add('[').Add(NodeTypeDelimiter).Add(link.LinkType).Add(link.Body).Add(']');
+
+    public static StringBuilder Add(this StringBuilder sb, Seq<LinkTarget> targets) => 
+        targets.Fold(sb, (inner, target) => inner.Add('-').Add(target.Link).Add("->").Add(target.Target));
+
+    public static StringBuilder AddDeleteExpression(this StringBuilder sb, Neo4JNode node) {
+        var validNode = node.Id is null ? node with{ Id = "x" } : node;
+        return sb.Add("MATCH ").Add(validNode).Add(" DETACH DELETE ").Add(node.Id!.Value).Add(Cypher.CommandTerminationDelimiter);
+    }
+
+    public static StringBuilder AddValue(this StringBuilder sb, object? v) =>
+        v switch{
+            null     => sb.Append("null"),
+            string s => sb.AddQuotedString(s),
+            bool b   => sb.Append(b),
+            int n    => sb.Append(n),
+            double r => sb.Append(r),
+
+            _ => throw new ArgumentOutOfRangeException($"Value of type {v.GetType()} is not supported")
+        };
+
+    public static StringBuilder AddQuotedString(this StringBuilder sb, string s) {
+        sb.Add('\'');
+        foreach(var c in s)
+            if (c == '\'')
+                sb.Append("\\'");
+            else
+                sb.Add(c);
+        return sb.Add('\'');
+    }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static StringBuilder Add(this StringBuilder sb, Seq<ICypherNode> nodes) => 
         sb.Join(nodes, (inner, n) => n.ToCommandString(inner), (inner, _) => inner.NewLine());
@@ -117,7 +192,7 @@ static class CypherStringBuilderExtension
 
     public static StringBuilder Add(this StringBuilder sb, ValueTerm term) =>
         term switch{
-            ValueTerm.Constant c => sb.AddQuotedString(c.Value),
+            ValueTerm.Constant c => sb.AddValue(c.Value),
             ValueTerm.Variable v => sb.Append(v.Name),
             ValueTerm.Property p => sb.Append(p.NodeId).Add('.').Append(p.Field),
             ValueTerm.FunctionCall f => sb.Append(f.Name).Add('(').Join(',', f.Parameters, (inner,v) => inner.Add(v)).Add(')'),

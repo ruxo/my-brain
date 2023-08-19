@@ -32,10 +32,16 @@ public readonly record struct Neo4JNode(string? NodeType = null, Neo4JProperties
         new(nodeType, new(Seq(properties)));
 }
 
-public readonly record struct Neo4JProperty(string Name, string Value)
+public readonly record struct Neo4JProperty(string Name, object? Value)
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Neo4JProperty(in (string name, string value) property) => new(property.name, property.value);
+    public static implicit operator Neo4JProperty(in (string name, string? value) property) => new(property.name, property.value);
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator Neo4JProperty(in (string name, bool value) property) => new(property.name, property.value);
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator Neo4JProperty(in (string name, int value) property) => new(property.name, property.value);
 }
 
 public readonly record struct Neo4JProperties(Seq<Neo4JProperty> Properties)
