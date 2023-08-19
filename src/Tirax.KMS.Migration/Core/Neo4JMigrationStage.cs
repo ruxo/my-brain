@@ -16,6 +16,14 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         var targetVersionText = targetVersion.Map(v => v.ToString()).IfNone("latest");
 
         var toMigrate = Seq(migrations.OrderBy(m => m.Version));
+
+        var invalidVersions = toMigrate.GroupBy(m => m.Version).Where(g => g.Count() > 1).Select(g => g.Key).ToSeq();
+        if (invalidVersions.Any()) {
+            Console.WriteLine("Following migration version is duplicated:");
+            invalidVersions.Iter(v => Console.WriteLine("- {0}", v));
+            return;
+        }
+        
         var toMigrateVersion = targetVersion.IfNone(toMigrate.Last().Version);
 
         if (toMigrate.All(m => m.Version != toMigrateVersion)) {
@@ -35,10 +43,12 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
                 if (isUpgrading)
                     foreach(var migration in toMigrate.Where(m => m.Version > latest.Version))
                         migrationHistory = await Upgrade(migrationHistory, migration);
-                else
+                else {
                     foreach(var migration in toMigrate.Where(m => m.Version > toMigrateVersion && m.Version <= latest.Version)
                                                       .OrderByDescending(m => m.Version))
-                        migrationHistory = await Downgrade(migrationHistory, migration);
+                        migrationHistory = await Downgrading(migrationHistory, migration);
+                    await RebuildMigrationHistory(migrationHistory);
+                }
             }
         }
         else {
@@ -60,8 +70,30 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         return record.Map(r => Extract(r.GetPath(ResultVar))).IfNone(new MigrationInfo());
     }
 
-    ValueTask<MigrationInfo> Downgrade(MigrationInfo history, IMigration migration) {
-        throw new NotImplementedException();
+    async ValueTask<MigrationInfo> Downgrading(MigrationInfo history, IMigration migration) {
+        var migrationNode = history.Migrations.Rev().Single(r => r.Version == migration.Version) with{
+            Downgraded = DateTime.UtcNow
+        };
+        await migration.Down();
+
+        string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", migrationNode.Id.ToString())))
+                             .Set((("n", "downgraded"), migrationNode.Downgraded.Value.ToString("O")));
+        await db.Execute(query);
+
+        return history with{
+            Migrations = history.Migrations.Map(m => m.Version == migrationNode.Version ? migrationNode : m)
+        };
+    }
+
+    async ValueTask<MigrationInfo> RebuildMigrationHistory(MigrationInfo history) {
+        var newHistory = new MigrationInfo(Version: history.Version + 1, Migrations: history.Migrations.TakeWhile(m => m.Downgraded is null));
+
+        string query = Cypher.Match(QueryNode.Of("Bookmark", "n", ("version", history.Version)))
+                             .Set((("n", "latest"), false));
+        await db.Execute(query);
+        await db.CreateNode(Neo4JNode.Of("Bookmark", ("label", "migration"), ("latest", true), ("version", newHistory.Version)),
+                            newHistory.Migrations.Map(m => new LinkTarget("MIGRATE", m.ToNeo4JNode())).ToArray());
+        return newHistory;
     }
 
     async ValueTask<MigrationInfo> Upgrade(MigrationInfo history, IMigration migration) {
@@ -70,17 +102,23 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         var newMigration = new MigrationRecord(Guid.NewGuid(), migration.Version, migration.Name, DateTime.UtcNow);
         var target = newMigration.ToNeo4JNode();
         var version = history.Version + 1;
-        if (history.Latest.IfSome(out var latest)) {
+        var newHistory = new MigrationInfo(version, history.Migrations.Add(newMigration));
+        
+        if (newHistory.Latest.IfSome(out var latest)) {
+            string bookmarkUpdate = Cypher.Match(QueryNode.Of("Bookmark", "n", ("version", history.Version)))
+                                          .Set((("n", "version"), newHistory.Version));
             string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", latest.Id.ToString()), ("latest", true)))
-                                 .Set((("n", "version"), version))
                                  .Create(Neo4JNode.Of(id: "n"), new LinkTarget("MIGRATE", target));
-            await db.Execute(query);
+            await db.Execute(Seq(bookmarkUpdate, query).Join('\n'));
         }
         else
-            await db.CreateNode(Neo4JNode.Of("Bookmark", ("label", "migration"), ("latest", true), ("version", version)),
-                                new LinkTarget("MIGRATE", target));
-        return new(version, history.Migrations.Add(newMigration));
+            await CreateMigrationHistory(newHistory);
+        return newHistory;
     }
+
+    ValueTask CreateMigrationHistory(MigrationInfo history) =>
+        db.CreateNode(Neo4JNode.Of("Bookmark", ("label", "migration"), ("latest", true), ("version", history.Version)),
+                      history.Migrations.Map(m => new LinkTarget("MIGRATE", m.ToNeo4JNode())).ToArray());
 
     static MigrationInfo Extract(IPath p) {
         var path = p.EnumerateNodes();

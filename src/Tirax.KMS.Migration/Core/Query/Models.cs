@@ -36,6 +36,9 @@ public record ValueTerm
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ValueTerm(int value) => new Constant(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator ValueTerm(bool value) => new Constant(value);
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ValueTerm(in (string nodeId, string field) x) => new Property(x.nodeId, x.field);
