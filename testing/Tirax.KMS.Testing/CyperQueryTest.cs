@@ -18,7 +18,7 @@ public sealed class CyperQueryTest
         var bookmark = QueryNode.Of("Bookmark", ("label", "migration"));
         string query = Cypher.Match(bookmark.LinkTo("MIGRATE", QueryNode.Any, Qualifier.Any).ToPath("p"))
                              .Returns("p")
-                             .OrderBy(ResultOrderBy.Desc(ValueTerm.FunctionCall.Of("length", "p")))
+                             .OrderBy(ResultOrderBy.Desc(ValueTerm.FunctionCall.Of("length", ValueTerm.Var("p"))))
                              .Limit(1);
         const string Expected = "MATCH p=(:Bookmark{label:'migration'})-[:MIGRATE]->*()\nRETURN p\nORDER BY length(p) DESC\nLIMIT 1;";
         query.Should().Be(Expected, $"value not match: `{query}`");

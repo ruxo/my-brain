@@ -32,7 +32,10 @@ public record ValueTerm
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator ValueTerm(string variable) => new Variable(variable);
+    public static ValueTerm Var(string variable) => new Variable(variable);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator ValueTerm(string value) => new Constant(value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ValueTerm(int value) => new Constant(value);
@@ -144,7 +147,7 @@ public record ResultOrderBy
     public sealed record Descending(ValueTerm Value) : ResultOrderBy;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator ResultOrderBy(string variable) => new Ascending(variable);
+    public static implicit operator ResultOrderBy(string variable) => new Ascending(ValueTerm.Var(variable));
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ResultOrderBy Desc(ValueTerm term) => new Descending(term);

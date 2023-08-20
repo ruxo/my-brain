@@ -67,7 +67,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         var bookmark = QueryNode.Of("Bookmark", ("label", "migration"), ("latest", true));
         string query = Cypher.Match(bookmark.LinkTo("MIGRATE", QueryNode.Any, Qualifier.Any).ToPath(ResultVar))
                              .Returns(ResultVar)
-                             .OrderBy(ResultOrderBy.Desc(ValueTerm.FunctionCall.Of("length", ResultVar)))
+                             .OrderBy(ResultOrderBy.Desc(ValueTerm.FunctionCall.Of("length", ValueTerm.Var(ResultVar))))
                              .Limit(1);
         var record = await db.Read(async runner => {
             var cursor = await runner.Read(query);
