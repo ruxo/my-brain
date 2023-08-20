@@ -56,7 +56,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         else {
             Console.WriteLine($"Initialize to version: {toMigrateVersion}");
             await db.RunTransaction(async tx => {
-                foreach (var m in toMigrate)
+                foreach (var m in toMigrate.Where(m => m.Version <= toMigrateVersion))
                     migrationHistory = await Upgrade(tx, migrationHistory, m);
             });
         }
@@ -95,7 +95,10 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
     }
 
     static async ValueTask<MigrationInfo> RebuildMigrationHistory(INeo4JTransaction tx, MigrationInfo history) {
-        var newHistory = new MigrationInfo(Version: history.Version + 1, Migrations: history.Migrations.TakeWhile(m => m.Downgraded is null));
+        var newHistory = new MigrationInfo(history.Version + 1,
+                                           history.Migrations
+                                                  .TakeWhile(m => m.Downgraded is null)
+                                                  .Map(m => m with { Id = Guid.NewGuid() }));
 
         string query = Cypher.Match(QueryNode.Of("Bookmark", "n", ("version", history.Version)))
                              .Set((("n", "latest"), false));

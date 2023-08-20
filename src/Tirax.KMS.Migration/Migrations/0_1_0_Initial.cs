@@ -4,10 +4,11 @@ namespace Tirax.KMS.Migration.Migrations;
 
 public sealed class Initial : IMigration {
     public async ValueTask SchemaUp(IQueryRunner runner) {
+        await runner.CreateUniqueConstraint("Migration", "id");
         await runner.CreateUniqueConstraint("Tag", "name");
         await runner.CreateUniqueConstraint("LinkObject", "uri");
         await runner.CreateIndex("Concept", "name");
-        await runner.CreateIndex("Bookmark", "label");
+        await runner.CreateIndex("Bookmark", Seq("label", "latest"));
         await runner.CreateFullTextIndex("conceptNameIndex", "Concept", "name");
         await runner.CreateFullTextIndex("linkObjectNameIndex", "LinkObject", "name");
     }
