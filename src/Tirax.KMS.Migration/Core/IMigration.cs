@@ -17,8 +17,11 @@ public readonly record struct SemVer(int Major, int Minor, int Revision)
 
 public interface IMigration
 {
-    ValueTask Up();
-    ValueTask Down();
+    ValueTask SchemaUp(IQueryRunner runner) { return ValueTask.CompletedTask; }
+    ValueTask SchemaDown(IQueryRunner runner) { return ValueTask.CompletedTask; }
+    
+    ValueTask DataUp(IQueryRunner runner) { return ValueTask.CompletedTask; }
+    ValueTask DataDown(IQueryRunner runner) { return ValueTask.CompletedTask; }
     
     string Name { get; }
     Version Version { get; }

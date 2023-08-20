@@ -41,20 +41,25 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
                 var word = isUpgrading? "Upgrade" : "Downgrade";
                 Console.WriteLine($"{word} to version: {targetVersionText}");
                 if (isUpgrading)
-                    foreach(var migration in toMigrate.Where(m => m.Version > latest.Version))
-                        migrationHistory = await Upgrade(migrationHistory, migration);
-                else {
-                    foreach(var migration in toMigrate.Where(m => m.Version > toMigrateVersion && m.Version <= latest.Version)
-                                                      .OrderByDescending(m => m.Version))
-                        migrationHistory = await Downgrading(migrationHistory, migration);
-                    await RebuildMigrationHistory(migrationHistory);
-                }
+                    await db.RunTransaction(async tx => {
+                        foreach (var migration in toMigrate.Where(m => m.Version > latest.Version))
+                            migrationHistory = await Upgrade(tx, migrationHistory, migration);
+                    });
+                else
+                    await db.RunTransaction(async tx => {
+                        foreach (var migration in toMigrate.Where(m => m.Version > toMigrateVersion && m.Version <= latest.Version)
+                                                           .OrderByDescending(m => m.Version))
+                            migrationHistory = await Downgrading(tx, migrationHistory, migration);
+                        await RebuildMigrationHistory(tx, migrationHistory);
+                    });
             }
         }
         else {
             Console.WriteLine($"Initialize to version: {targetVersionText}");
-            foreach (var m in toMigrate)
-                migrationHistory = await Upgrade(migrationHistory, m);
+            await db.RunTransaction(async tx => {
+                foreach (var m in toMigrate)
+                    migrationHistory = await Upgrade(tx, migrationHistory, m);
+            });
         }
     }
 
@@ -65,60 +70,81 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
                              .Returns(ResultVar)
                              .OrderBy(ResultOrderBy.Desc(ValueTerm.FunctionCall.Of("length", ResultVar)))
                              .Limit(1);
-        var cursor = await db.Query(query);
-        var record = await cursor.TryFirst();
+        var record = await db.Read(async runner => {
+            var cursor = await runner.Read(query);
+            return await cursor.TryFirst();
+        });
         return record.Map(r => Extract(r.GetPath(ResultVar))).IfNone(new MigrationInfo());
     }
 
-    async ValueTask<MigrationInfo> Downgrading(MigrationInfo history, IMigration migration) {
+    static async ValueTask<MigrationInfo> Downgrading(INeo4JTransaction tx, MigrationInfo history, IMigration migration) {
         var migrationNode = history.Migrations.Rev().Single(r => r.Version == migration.Version) with{
             Downgraded = DateTime.UtcNow
         };
-        await migration.Down();
-
+        
         string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", migrationNode.Id.ToString())))
                              .Set((("n", "downgraded"), migrationNode.Downgraded.Value.ToString("O")));
-        await db.Execute(query);
+        await tx.Write(migration.SchemaDown);
+        await tx.Write(async runner => {
+            await migration.DataDown(runner);
+            await runner.Write(query);
+        });
 
         return history with{
             Migrations = history.Migrations.Map(m => m.Version == migrationNode.Version ? migrationNode : m)
         };
     }
 
-    async ValueTask<MigrationInfo> RebuildMigrationHistory(MigrationInfo history) {
+    static async ValueTask<MigrationInfo> RebuildMigrationHistory(INeo4JTransaction tx, MigrationInfo history) {
         var newHistory = new MigrationInfo(Version: history.Version + 1, Migrations: history.Migrations.TakeWhile(m => m.Downgraded is null));
 
         string query = Cypher.Match(QueryNode.Of("Bookmark", "n", ("version", history.Version)))
                              .Set((("n", "latest"), false));
-        await db.Execute(query);
-        await db.CreateNode(Neo4JNode.Of("Bookmark", ("label", "migration"), ("latest", true), ("version", newHistory.Version)),
-                            newHistory.Migrations.Map(m => new LinkTarget("MIGRATE", m.ToNeo4JNode())).ToArray());
+        await tx.Write(async runner => {
+            await runner.Write(query);
+            await CreateMigrationHistory(runner, newHistory);
+        });
         return newHistory;
     }
 
-    async ValueTask<MigrationInfo> Upgrade(MigrationInfo history, IMigration migration) {
-        await migration.Up();
-
+    static async ValueTask<MigrationInfo> Upgrade(INeo4JTransaction tx, MigrationInfo history, IMigration migration) {
         var newMigration = new MigrationRecord(Guid.NewGuid(), migration.Version, migration.Name, DateTime.UtcNow);
         var target = newMigration.ToNeo4JNode();
         var version = history.Version + 1;
         var newHistory = new MigrationInfo(version, history.Migrations.Add(newMigration));
-        
-        if (newHistory.Latest.IfSome(out var latest)) {
+
+        var bookmarkExisted = history.Latest.IfSome(out var latest);
+        if (bookmarkExisted) {
             string bookmarkUpdate = Cypher.Match(QueryNode.Of("Bookmark", "n", ("version", history.Version)))
                                           .Set((("n", "version"), newHistory.Version));
+            
             string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", latest.Id.ToString()), ("latest", true)))
                                  .Create(Neo4JNode.Of(id: "n"), new LinkTarget("MIGRATE", target));
-            await db.Execute(Seq(bookmarkUpdate, query).Join('\n'));
+            await tx.Write(migration.SchemaUp);
+            await tx.Write(async runner => {
+                await migration.DataUp(runner);
+                await runner.Write(bookmarkUpdate);
+                await runner.Write(query);
+            });
         }
-        else
-            await CreateMigrationHistory(newHistory);
+        else {
+            await tx.Write(migration.SchemaUp);
+            await tx.Write(async runner => {
+                await migration.DataUp(runner);
+                await CreateMigrationHistory(runner, newHistory);
+            });
+        }
         return newHistory;
     }
 
-    ValueTask CreateMigrationHistory(MigrationInfo history) =>
-        db.CreateNode(Neo4JNode.Of("Bookmark", ("label", "migration"), ("latest", true), ("version", history.Version)),
-                      history.Migrations.Map(m => new LinkTarget("MIGRATE", m.ToNeo4JNode())).ToArray());
+    static async ValueTask<Unit> CreateMigrationHistory(IQueryRunner runner, MigrationInfo history) {
+        var node = Neo4JNode.Of("Bookmark", ("label", "migration"), ("latest", true), ("version", history.Version));
+        var targets = history.Migrations.Map(m => new LinkTarget("MIGRATE", m.ToNeo4JNode()));
+        var n = new CreateNode(node, targets);
+        var query = n.ToCommandString(new (128)).ToString();
+        await runner.Write(query);
+        return Unit.Default;
+    }
 
     static MigrationInfo Extract(IPath p) {
         var path = p.EnumerateNodes();

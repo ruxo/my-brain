@@ -2,20 +2,21 @@
 
 namespace Tirax.KMS.Migration.Core;
 
-public interface INeo4JDatabase
+public interface IQueryRunner
 {
-    ValueTask CreateUniqueConstraint(string nodeType, string field);
-    ValueTask DeleteUniqueConstraint(string nodeType, string field);
+    ValueTask<IResultCursor> Read(string query, object? parameters = null);
+    ValueTask<IResultSummary> Write(string query, object? parameters = null);
+}
 
-    ValueTask CreateIndex(string nodeType, NodeFields fields);
-    ValueTask DeleteIndex(string nodeType, NodeFields fields);
-    
-    ValueTask CreateFullTextIndex(string indexName, string nodeType, NodeFields fields);
-    ValueTask DeleteFullTextIndex(string indexName);
+public interface INeo4JTransaction
+{
+    ValueTask<T> Read<T>(Func<IQueryRunner, ValueTask<T>> handler);
+    ValueTask<T> Write<T>(Func<IQueryRunner, ValueTask<T>> handler);
+    ValueTask<Unit> Write(Func<IQueryRunner, ValueTask> handler);
+}
 
-    ValueTask CreateNode(Neo4JNode node, params LinkTarget[] targets);
-    ValueTask DeleteNodes(params Neo4JNode[] nodes);
-
-    ValueTask<IResultCursor> Query(string query, object? parameters = null);
-    ValueTask<IResultSummary> Execute(string query, object? parameters = null);
+public interface INeo4JDatabase : INeo4JTransaction
+{
+    ValueTask<T> RunTransaction<T>(Func<INeo4JTransaction, ValueTask<T>> handler);
+    ValueTask<Unit> RunTransaction(Func<INeo4JTransaction, ValueTask> handler);
 }
