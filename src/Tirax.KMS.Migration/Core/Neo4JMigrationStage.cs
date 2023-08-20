@@ -13,7 +13,6 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         Console.WriteLine();
 
         var migrationHistory = await LoadLatestMigration();
-        var targetVersionText = targetVersion.Map(v => v.ToString()).IfNone("latest");
 
         var toMigrate = Seq(migrations.OrderBy(m => m.Version));
 
@@ -35,11 +34,11 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         
         if (migrationHistory.Latest.IfSome(out var latest)) {
             if (latest.Version == toMigrateVersion)
-                Console.WriteLine($"Latest migration is already at version: {targetVersionText}");
+                Console.WriteLine($"Latest migration is already at version: {toMigrateVersion}");
             else {
                 var isUpgrading = latest.Version < toMigrateVersion;
                 var word = isUpgrading? "Upgrade" : "Downgrade";
-                Console.WriteLine($"{word} to version: {targetVersionText}");
+                Console.WriteLine($"{word} to version: {toMigrateVersion}");
                 if (isUpgrading)
                     await db.RunTransaction(async tx => {
                         foreach (var migration in toMigrate.Where(m => m.Version > latest.Version))
@@ -55,7 +54,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
             }
         }
         else {
-            Console.WriteLine($"Initialize to version: {targetVersionText}");
+            Console.WriteLine($"Initialize to version: {toMigrateVersion}");
             await db.RunTransaction(async tx => {
                 foreach (var m in toMigrate)
                     migrationHistory = await Upgrade(tx, migrationHistory, m);
@@ -118,7 +117,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
             string bookmarkUpdate = Cypher.Match(QueryNode.Of("Bookmark", "n", ("version", history.Version)))
                                           .Set((("n", "version"), newHistory.Version));
             
-            string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", latest.Id.ToString()), ("latest", true)))
+            string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", latest.Id.ToString())))
                                  .Create(Neo4JNode.Of(id: "n"), new LinkTarget("MIGRATE", target));
             await tx.Write(migration.SchemaUp);
             await tx.Write(async runner => {
@@ -160,7 +159,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
                 Version.Parse(node["version"].As<string>()),
                 node["name"].As<string>(),
                 DateTime.Parse(node["updated"].As<string>()),
-                Optional(node["downgraded"].As<string?>()).Map(DateTime.Parse).ToNullable());
+                node.Properties.TryGetValue("downgraded").Map(v => DateTime.Parse((string)v)).ToNullable());
 
         public Neo4JNode ToNeo4JNode() =>
             Neo4JNode.Of("Migration",
