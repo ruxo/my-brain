@@ -8,7 +8,7 @@ public sealed class AkkaService : IHostedService, IActorFacade
 {
     readonly Lazy<ActorSystem> system;
     
-    public AkkaService(IServiceProvider serviceProvider, IHostApplicationLifetime appLifetime, IConfiguration configuration) {
+    public AkkaService(IServiceProvider serviceProvider, IHostApplicationLifetime appLifetime) {
         system = new(() => {
             var bootstrap = BootstrapSetup.Create();
             var diSetup = DependencyResolverSetup.Create(serviceProvider);
