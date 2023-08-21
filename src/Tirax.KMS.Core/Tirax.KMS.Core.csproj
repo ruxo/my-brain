@@ -11,9 +11,12 @@
     <PackageReference Include="Akka" Version="1.5.10" />
     <PackageReference Include="Akka.DependencyInjection" Version="1.5.10" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="7.0.1" />
-    <PackageReference Include="Neo4j.Driver" Version="5.10.0" />
     <PackageReference Include="ReactiveUI" Version="19.4.1" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <ProjectReference Include="..\RZ.Database.Neo4J\RZ.Database.Neo4J.csproj" />
+  </ItemGroup>
 
 </Project>

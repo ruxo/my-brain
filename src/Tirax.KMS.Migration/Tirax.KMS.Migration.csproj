@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\RZ.Database.Neo4J\RZ.Database.Neo4J.csproj" />
     <ProjectReference Include="..\Tirax.KMS.Core\Tirax.KMS.Core.csproj" />
   </ItemGroup>
 

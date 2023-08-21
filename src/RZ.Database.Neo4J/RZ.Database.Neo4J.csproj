@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    
+    <PackageId>RZ.Database.Neo4J</PackageId>
+    <Title>Neo4J Query Abstraction library</Title>
+    
+    <DocumentationFile>bin\RZ.Database.Neo4J.xml</DocumentationFile>
+    <NoWarn>1701;1702;NU5105;1591</NoWarn>
+    <RootNamespace>RZ.Database</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Neo4j.Driver" Version="5.11.0" />
+  </ItemGroup>
+
+
+</Project>
