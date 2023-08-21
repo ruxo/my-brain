@@ -1,8 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using Neo4j.Driver;
-using Tirax.KMS.Database;
 
-namespace Tirax.KMS.Migration.Core;
+namespace RZ.Database.Neo4J;
 
 public sealed class Neo4JDatabase : INeo4JDatabase, IAsyncDisposable, IDisposable
 {

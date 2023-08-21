@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using Neo4j.Driver;
 
-namespace Tirax.KMS.Migration.Core;
+namespace RZ.Database.Neo4J;
 
 public static class Neo4JRecordExtension
 {

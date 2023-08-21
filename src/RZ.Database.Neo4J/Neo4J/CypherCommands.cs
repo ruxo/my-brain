@@ -1,9 +1,9 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Text;
 using Neo4j.Driver;
-using Tirax.KMS.Migration.Core.Query;
+using RZ.Database.Neo4J.Query;
 
-namespace Tirax.KMS.Migration.Core;
+namespace RZ.Database.Neo4J;
 
 public static class CypherCommands
 {

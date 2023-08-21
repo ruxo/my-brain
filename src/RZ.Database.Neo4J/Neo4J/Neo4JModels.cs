@@ -1,7 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using Seq = LanguageExt.Seq;
 
-namespace Tirax.KMS.Migration.Core;
+namespace RZ.Database.Neo4J;
 
 public enum LinkDirection
 {

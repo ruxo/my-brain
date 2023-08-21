@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace Tirax.KMS.Migration.Core.Query;
+namespace RZ.Database.Neo4J.Query;
 
 public sealed class CreateNode(Neo4JNode node, Seq<LinkTarget> targets) : ICypherNode
 {

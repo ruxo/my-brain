@@ -1,4 +1,4 @@
-﻿namespace Tirax.KMS.Database;
+﻿namespace RZ.Database;
 
 public readonly record struct GenericDbConnection(string Host, Option<string> Database, Option<string> User, Option<string> Password)
 {

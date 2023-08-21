@@ -1,6 +1,7 @@
 using FluentAssertions;
+using RZ.Database.Neo4J;
+using RZ.Database.Neo4J.Query;
 using Tirax.KMS.Migration.Core;
-using Tirax.KMS.Migration.Core.Query;
 
 namespace Tirax.KMS.Testing;
 

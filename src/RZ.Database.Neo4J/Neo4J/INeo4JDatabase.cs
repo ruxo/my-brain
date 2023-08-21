@@ -1,6 +1,6 @@
 ﻿using Neo4j.Driver;
 
-namespace Tirax.KMS.Migration.Core;
+namespace RZ.Database.Neo4J;
 
 public interface IQueryRunner
 {

@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace Tirax.KMS.Migration.Core.Query;
+namespace RZ.Database.Neo4J.Query;
 
 public interface ICypherNode
 {

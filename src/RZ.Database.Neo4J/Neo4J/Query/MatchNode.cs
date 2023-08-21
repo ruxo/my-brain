@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace Tirax.KMS.Migration.Core.Query;
+namespace RZ.Database.Neo4J.Query;
 
 public sealed record MatchNode(QueryNode Head, Seq<LinkNode> Links, string? Id = null) : ICypherNode
 {

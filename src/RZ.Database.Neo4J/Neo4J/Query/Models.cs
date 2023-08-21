@@ -2,7 +2,7 @@
 using System.Text;
 using Seq = LanguageExt.Seq;
 
-namespace Tirax.KMS.Migration.Core.Query;
+namespace RZ.Database.Neo4J.Query;
 
 // reference: https://neo4j.com/docs/cypher-manual/current/patterns/reference/#label-expressions
 public record LabelTerm

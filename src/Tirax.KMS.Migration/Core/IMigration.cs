@@ -1,4 +1,6 @@
-﻿namespace Tirax.KMS.Migration.Core;
+﻿using RZ.Database.Neo4J;
+
+namespace Tirax.KMS.Migration.Core;
 
 public readonly record struct SemVer(int Major, int Minor, int Revision)
 {

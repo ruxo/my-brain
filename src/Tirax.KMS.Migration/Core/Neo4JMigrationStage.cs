@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using Neo4j.Driver;
-using Tirax.KMS.Migration.Core.Query;
+using RZ.Database.Neo4J;
+using RZ.Database.Neo4J.Query;
 using Seq = LanguageExt.Seq;
 
 namespace Tirax.KMS.Migration.Core;

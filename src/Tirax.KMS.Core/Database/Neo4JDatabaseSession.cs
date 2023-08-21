@@ -2,6 +2,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
+using RZ.Database;
 using Tirax.KMS.Domain;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 using Seq = LanguageExt.Seq;

@@ -2,8 +2,10 @@
 using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using RZ.Database;
+using RZ.Database.Neo4J;
 using TCRB.CoreApp.Helpers;
-using Tirax.KMS.Database;
+using Neo4JDatabase = RZ.Database.Neo4J.Neo4JDatabase;
 
 namespace Tirax.KMS.Migration.Core;
 
