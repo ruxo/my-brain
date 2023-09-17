@@ -7,12 +7,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.Logging;
 using MudBlazor.Services;
 using RZ.Database;
+using RZ.Database.Neo4J;
 using Tirax.KMS;
 using Tirax.KMS.Akka;
 using Tirax.KMS.App.Features.Authentication;
 using Tirax.KMS.App.Services.Akka;
 using Tirax.KMS.App.Services.Interop;
-using Tirax.KMS.Database;
 using Tirax.KMS.Domain;
 using Tirax.KMS.Server;
 
@@ -30,10 +30,7 @@ builder.Services.AddServerSideBlazor();
 
 builder.Services.AddSingleton<IKmsServer, KmsServer>();
 
-builder.Services.AddSingleton<IKmsDatabase>(sp => {
-    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-    return new Neo4JDatabase(loggerFactory, dbConn);
-});
+builder.Services.AddSingleton<INeo4JDatabase>(_ => new Neo4JDatabase(dbConn));
 
 builder.Services.AddSingleton(sp => {
     var server = sp.GetRequiredService<IKmsServer>();
@@ -132,7 +129,7 @@ static async Task<(ConceptId, GenericDbConnection)> createAppModel(IConfiguratio
     var connection = config.GetConnectionString(DbConnectionKey) ?? throw new InvalidOperationException($"Need '{DbConnectionKey}' connection");
     ILoggerFactory loggerFactory = new NullLoggerFactory();
     var dbConnection = GenericDbConnection.From(connection);
-    var db = new Neo4JDatabase(loggerFactory, dbConnection);
+    var db = new Neo4JDatabase(dbConnection);
     var server = new KmsServer(loggerFactory.CreateLogger<KmsServer>(), db);
     var home = await server.GetHome();
     return (home.Id, dbConnection);

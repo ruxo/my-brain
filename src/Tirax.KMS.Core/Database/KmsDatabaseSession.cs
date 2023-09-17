@@ -2,34 +2,11 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
-using RZ.Database;
 using Tirax.KMS.Domain;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 using Seq = LanguageExt.Seq;
 
 namespace Tirax.KMS.Database;
-
-public sealed class Neo4JDatabase : IKmsDatabase, IAsyncDisposable
-{
-    readonly ILoggerFactory loggerFactory;
-    readonly IDriver connector;
-    
-    #region ctors & dtor
-
-    public Neo4JDatabase(ILoggerFactory loggerFactory, GenericDbConnection connection) {
-        this.loggerFactory = loggerFactory;
-        var auth = from user in connection.User
-                   from pass in connection.Password
-                   select AuthTokens.Basic(user, pass);
-        connector = auth.IfSome(out var a)? GraphDatabase.Driver(connection.Host, a) : GraphDatabase.Driver(connection.Host);
-    }
-
-    public ValueTask DisposeAsync() => connector.DisposeAsync();
-    
-    #endregion
-    
-    public IKmsDatabaseSession Session() => new Neo4JDatabaseSession(loggerFactory.CreateLogger<Neo4JDatabaseSession>(), connector.AsyncSession());
-}
 
 static class Materialization
 {
@@ -139,9 +116,10 @@ RETURN concept, [] AS contains, [] AS links, [] AS tags
               Materialization.ToLinkObject,
               linkIds);
 
-    public ValueTask<Seq<ConceptTag>> GetTags() =>
-        Query("MATCH (tag:Tag) RETURN tag", Materialization.ToConceptTag);
-    
+    public ValueTask<Seq<ConceptTag>> GetTags() {
+        throw new NotImplementedException();
+    }
+
     public async ValueTask<Concept> GetHome() {
         const string q = "MATCH (t:Bookmark { label: 'home' })-[:POINT]->(concept:Concept) " + ConceptReturn;
         var result = await Query(q, Materialization.ToConcept);

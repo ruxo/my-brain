@@ -6,7 +6,7 @@
     <MudText Typo="Typo.subtitle2">Owners:</MudText>
     <MudBreadcrumbs Separator="|" Style="padding: 0" Items="ViewModel!.OwnerBreadcrumbs">
         <ItemTemplate Context="item">
-            <MudLink Color="Color.Primary" Disabled="item.Disabled" OnClick="() => NotifyConceptSelected(item.Href)">
+            <MudLink Color="Color.Primary" Disabled="item.Disabled" OnClick="() => NotifyConceptSelected(item.Href!)">
                 @item.Text
             </MudLink>
         </ItemTemplate>

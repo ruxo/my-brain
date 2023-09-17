@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using LanguageExt.Common;
 using LanguageExt.UnitsOfMeasure;
 using Microsoft.Extensions.Logging;
+using RZ.Database.Neo4J;
 using Tirax.KMS.Database;
 using Tirax.KMS.Domain;
 using Tirax.KMS.Extensions;
@@ -30,20 +31,19 @@ public interface IKmsServer : IDisposable
 public sealed partial class KmsServer : IKmsServer
 {
     readonly ILogger logger;
-    readonly IKmsDatabase db;
+    readonly INeo4JDatabase db;
     readonly DateTime startTime = DateTime.UtcNow;
     Task<State> snapshot;
     readonly BlockingCollection<TransactionTask> inbox = new();
     readonly ManualResetEventSlim inboxQuit = new();
     bool isDisposed;
 
-    public KmsServer(ILogger<KmsServer> logger, IKmsDatabase db) {
+    public KmsServer(ILogger<KmsServer> logger, INeo4JDatabase db) {
         this.logger = logger;
         this.db = db;
         snapshot = Task.Run(async () => {
-            await using var session = db.Session();
-            var tags = await session.GetTags();
-            var home = await session.GetHome();
+            var tags = await db.Read(r => r.GetTags());
+            var home = await db.Read(r => r.GetHome());
             return new State(Some(home.Id),
                              tags.Map(t => (t.Id, t)).ToMap(),
                              Map.empty<ConceptId, Concept>().Add(home.Id, home),
@@ -71,10 +71,8 @@ public sealed partial class KmsServer : IKmsServer
         var state = await snapshot;
         if (state.Concepts.Get(id).IfSome(out var v))
             return Some(v);
-        else {
-            await using var session = db.Session();
-            return await Transact(Operations.Fetch(session, id));
-        }
+        else
+            return await Transact(Operations.Fetch(db, id));
     }
     
     #region Search by name
@@ -87,11 +85,9 @@ public sealed partial class KmsServer : IKmsServer
     }
 
     async ValueTask<Seq<(ConceptId Id, float Score)>> SearchConceptForKeyword(string keyword, int maxResult) {
-        await using var searchConceptSession = db.Session();
-        await using var searchLinkSession = db.Session();
         var searchKeyword = $"*{SanitizeSearchKeyword(keyword)}*";
-        var result = await Task.WhenAll(searchConceptSession.SearchByConceptName(searchKeyword, maxResult).AsTask(),
-                                        searchLinkSession.SearchByLinkName(searchKeyword, maxResult).AsTask());
+        var result = await Task.WhenAll(db.Read(q => q.SearchByConceptName(searchKeyword, maxResult)).AsTask(),
+                                        db.Read(q => q.SearchByLinkName(searchKeyword, maxResult)).AsTask());
         return Seq(from c in result.ToSeq().Flatten()
                    group c.Score by c.Id into g
                    select (g.Key, g.Max()));
@@ -105,14 +101,11 @@ public sealed partial class KmsServer : IKmsServer
 
     #endregion
 
-    public async ValueTask<Concept> CreateSubConcept(ConceptId owner, string name) {
-        await using var session = db.Session();
-        return await Transact(Operations.CreateSubConcept(session, owner, name));
-    }
+    public async ValueTask<Concept> CreateSubConcept(ConceptId owner, string name) => 
+        await Transact(Operations.CreateSubConcept(db, owner, name));
 
     public async ValueTask<Concept> NewLink(Concept owner, Option<string> name, URI uri) {
-        await using var session = db.Session();
-        var (concept, _) = await Transact(Operations.CreateLink(session, owner, name, uri));
+        var (concept, _) = await Transact(Operations.CreateLink(db, owner, name, uri));
         return concept;
     }
 
@@ -124,21 +117,18 @@ public sealed partial class KmsServer : IKmsServer
         var owners = state.Owners.Find(id).IfSome(out var result) ? result.ToSeq() : await findOwners();
         return await FetchUnsafe(owners);
 
-        async Task<Seq<ConceptId>> findOwners() {
-            await using var session = db.Session();
-            return await Transact(Operations.FindOwners(session, id));
-        }
+        async Task<Seq<ConceptId>> findOwners() => 
+            await Transact(Operations.FindOwners(db, id));
     }
 
     public async ValueTask<Concept> Update(Concept concept) {
         var state = await snapshot;
         var current = state.Concepts[concept.Id];
-        await using var session = db.Session();
-        return await Transact(Operations.Update(session, current, concept));
+        return await Transact(Operations.Update(db, current, concept));
     }
 
-    public ValueTask RecordUpTime() => 
-        db.Session().RecordUpTime(startTime);
+    public async ValueTask RecordUpTime() => 
+        await db.Write(w => w.RecordUpTime(startTime));
 
     /// <summary>
     /// Assume that Concept IDs in <paramref name="ids"/> are all valid!
@@ -150,14 +140,13 @@ public sealed partial class KmsServer : IKmsServer
 
     async ValueTask<Seq<T>> Fetch<T>(Seq<ConceptId> ids,
                                      Func<State, Map<ConceptId, T>> getMap,
-                                     Func<IKmsDatabaseSession, Seq<ConceptId>, TransactionResult<Seq<T>>> fetch) {
+                                     Func<INeo4JTransaction, Seq<ConceptId>, TransactionResult<Seq<T>>> fetch) {
         var state = await snapshot;
         var map = getMap(state);
         var (existing, needFetching) = ids.Partition(map.Find);
         if (needFetching.IsEmpty) return existing;
 
-        await using var session = db.Session();
-        var fetched = await Transact(fetch(session, needFetching.ToSeq()));
+        var fetched = await Transact(fetch(db, needFetching));
         return existing.Append(fetched);
     }
 
@@ -216,33 +205,33 @@ public sealed partial class KmsServer : IKmsServer
 
     static class Operations
     {
-        public static TransactionResult<Option<Concept>> Fetch(IKmsDatabaseSession session, ConceptId id) => async state => {
+        public static TransactionResult<Concept?> Fetch(INeo4JTransaction session, ConceptId id) => async state => {
             if (state.Concepts.Find(id).IfSome(out var existing))
                 return (state, new(existing));
             
-            var concept = await session.FetchConcept(id);
+            var concept = await session.Read(q => q.FetchConcept(id));
             var newState = state with{
-                Concepts = concept.Map(c => state.Concepts.Add(c.Id, c)).IfNone(state.Concepts)
+                Concepts = Optional(concept).Map(c => state.Concepts.Add(c.Id, c)).IfNone(state.Concepts)
             };
             return (newState, new(concept));
         };
 
-        public static TransactionResult<Seq<Concept>> Fetch(IKmsDatabaseSession session, Seq<ConceptId> ids) =>
-            Fetch(ids, state => state.Concepts, (state, map) => state with{ Concepts = map }, session.FetchConcepts);
+        public static TransactionResult<Seq<Concept>> Fetch(INeo4JTransaction session, Seq<ConceptId> ids) =>
+            Fetch(ids, state => state.Concepts, (state, map) => state with{ Concepts = map }, cid => session.Read(q => q.FetchConcepts(cid)));
 
-        public static TransactionResult<Seq<LinkObject>> FetchLinkObject(IKmsDatabaseSession session, Seq<ConceptId> ids) => 
-            Fetch(ids, state => state.Links, (state, map) => state with{ Links = map }, session.FetchLinkObjects);
+        public static TransactionResult<Seq<LinkObject>> FetchLinkObject(INeo4JTransaction session, Seq<ConceptId> ids) => 
+            Fetch(ids, state => state.Links, (state, map) => state with{ Links = map }, cid => session.Read(q => q.FetchLinkObjects(cid)));
 
-        public static TransactionResult<Seq<ConceptId>> FindOwners(IKmsDatabaseSession session, ConceptId cid) => async state => {
+        public static TransactionResult<Seq<ConceptId>> FindOwners(INeo4JTransaction session, ConceptId cid) => async state => {
             if (state.Owners.Find(cid).IfSome(out var existing))
                 return (state, new(existing));
-            var ownerIds = await session.FetchOwners(cid);
+            var ownerIds = await session.Read(q => q.FetchOwners(cid));
             var newState = state with{ Owners = state.Owners.Add(cid, ownerIds) };
             return (newState, new(ownerIds));
         };
 
-        public static TransactionResult<Concept> CreateSubConcept(IKmsDatabaseSession session, ConceptId owner, string name) => async state => {
-            var newConcept = await session.CreateSubConcept(owner, name);
+        public static TransactionResult<Concept> CreateSubConcept(INeo4JTransaction session, ConceptId owner, string name) => async state => {
+            var newConcept = await session.Read(q => q.CreateSubConcept(owner, name));
             var ownerConcept = state.Concepts[owner];
             var updatedOwner = ownerConcept with{ Contains = ownerConcept.Contains.Add(newConcept.Id) };
             var newState = state with{
@@ -252,9 +241,9 @@ public sealed partial class KmsServer : IKmsServer
             return (newState, new(newConcept));
         };
 
-        public static TransactionResult<(Concept, LinkObject)> CreateLink(IKmsDatabaseSession session, Concept owner, Option<string> name, URI uri) =>
+        public static TransactionResult<(Concept, LinkObject)> CreateLink(INeo4JTransaction session, Concept owner, Option<string> name, URI uri) =>
             async state => {
-                var link = await session.CreateLink(owner.Id, name, uri);
+                var link = await session.Write(q => q.CreateLink(owner.Id, name, uri));
                 var updated = owner with{ Links = owner.Links.Add(link.Id) };
                 var newState = state with{
                     Concepts = state.Concepts.AddOrUpdate(updated.Id, updated),
@@ -263,8 +252,8 @@ public sealed partial class KmsServer : IKmsServer
                 return (newState, new((updated, link)));
             };
 
-        public static TransactionResult<Concept> Update(IKmsDatabaseSession session, Concept old, Concept @new) => async state => {
-            var concept = await session.Update(old, @new);
+        public static TransactionResult<Concept> Update(INeo4JTransaction session, Concept old, Concept @new) => async state => {
+            var concept = await session.Write(q => q.Update(old, @new));
             var newState = state with{ Concepts = state.Concepts.AddOrUpdate(concept.Id, concept) };
             return (newState, new(concept));
         };
@@ -272,7 +261,7 @@ public sealed partial class KmsServer : IKmsServer
         static TransactionResult<Seq<T>> Fetch<T>(Seq<ConceptId> ids,
                                                   Func<State, Map<ConceptId, T>> getMap,
                                                   Func<State, Map<ConceptId, T>, State> setMap,
-                                                  Func<Seq<ConceptId>, Task<(Seq<T>, Seq<ConceptId>)>> fetch) where T : IDomainObject =>
+                                                  Func<Seq<ConceptId>, ValueTask<(Seq<T>, Seq<ConceptId>)>> fetch) where T : IDomainObject =>
             async state => {
                 var map = getMap(state);
                 var (existings, missings) = ids.Partition(map.Find);

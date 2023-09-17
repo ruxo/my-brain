@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Seq = LanguageExt.Seq;
 
@@ -25,6 +26,7 @@ public record ValueTerm
     public sealed record Constant(object Value) : ValueTerm;
     public sealed record Variable(string Name) : ValueTerm;
     public sealed record Property(string NodeId, string Field) : ValueTerm;
+    public sealed record Parameter(string Name) : ValueTerm;
 
     public sealed record FunctionCall(string Name, Seq<ValueTerm> Parameters) : ValueTerm
     {
@@ -33,6 +35,12 @@ public record ValueTerm
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ValueTerm Var(string variable) => new Variable(variable);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueTerm Param(string variable) => new Parameter(variable);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueTerm Call(string name, params ValueTerm[] parameters ) => new FunctionCall(name, parameters.ToSeq());
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ValueTerm(string value) => new Constant(value);
@@ -59,6 +67,8 @@ public record BooleanTerm
     public sealed record Gte(ValueTerm Left, ValueTerm Right) : BooleanTerm;
     public sealed record Neq(ValueTerm Left, ValueTerm Right) : BooleanTerm;
 
+    public sealed record In(ValueTerm Left, ValueTerm Right) : BooleanTerm;
+
     public sealed record And(BooleanTerm Left, BooleanTerm Right) : BooleanTerm;
     public sealed record Or(BooleanTerm Left, BooleanTerm Right) : BooleanTerm;
     public sealed record Not(BooleanTerm Expr) : BooleanTerm;
@@ -76,11 +86,13 @@ public record ProjectionTerm
 {
     public sealed record Direct(ValueTerm Value) : ProjectionTerm;
     public sealed record Alias(string Name, ProjectionTerm Term) : ProjectionTerm;
+    public sealed record Select(QueryPathNode Pattern, ValueTerm Projection) : ProjectionTerm;
 
     public StringBuilder ToCommandString(StringBuilder sb) =>
         this switch{
             Direct d => sb.Add(d.Value),
             Alias a  => a.Term.ToCommandString(sb).Append(" AS ").Append(a.Name),
+            Select s => sb.Append('[').Add(s.Pattern).Append('|').Add(s.Projection).Append(']'),
 
             _ => throw new NotImplementedException($"Command {this} is not yet implemented!")
         };
@@ -88,6 +100,9 @@ public record ProjectionTerm
     ProjectionTerm() {}
 }
 
+/// <summary>
+/// Neo4J node for query
+/// </summary>
 public sealed class QueryNode
 {
     public Option<string> Id { get; init; }
@@ -97,6 +112,9 @@ public sealed class QueryNode
 
     public static readonly QueryNode Any = new();
 
+    public static MatchNodeBuilder AnyWithId(string id) =>
+        new(new() { Id = id }, Seq.empty<LinkNode>());
+
     public static implicit operator QueryNode(string label) =>
         new(){ LabelExpression = (LabelTerm)label };
 
@@ -105,6 +123,7 @@ public sealed class QueryNode
 
     public static MatchNodeBuilder Of(LabelTerm labelExpr, string? id = null, params Neo4JProperty[] properties) => 
         new(new(){ Id = Optional(id), LabelExpression = labelExpr, Body = new(Seq(properties)) }, Seq.empty<LinkNode>());
+    
 }
 
 public readonly record struct Qualifier(int LowerBound = 1, int? UpperBound = null)
@@ -122,6 +141,8 @@ public readonly record struct Qualifier(int LowerBound = 1, int? UpperBound = nu
 public readonly record struct QueryLink(QueryNode? Link = null, LinkDirection Direction = LinkDirection.ToRight, Qualifier? Qualifier = null);
 public readonly record struct LinkNode(QueryLink Link, QueryNode Target);
 
+public readonly record struct QueryPathNode(QueryNode Head, Seq<LinkNode> Links);
+
 public readonly struct MatchNodeBuilder(QueryNode head, Seq<LinkNode> links)
 {
     public MatchNodeBuilder LinkTo(string linkType, QueryNode target, Qualifier? qualifier = null) =>
@@ -135,7 +156,24 @@ public readonly struct MatchNodeBuilder(QueryNode head, Seq<LinkNode> links)
     public MatchNode ToMatchNode() => new(head, links);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryPathNode ToQueryPathNode() => new(head, links);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryNode ToQueryNode() {
+        Debug.Assert(links.IsEmpty);
+        return head;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator MatchNode(MatchNodeBuilder builder) => builder.ToMatchNode();
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator QueryPathNode(MatchNodeBuilder matchNode) =>
+        matchNode.ToQueryPathNode();
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator QueryNode(MatchNodeBuilder matchNode) => 
+        matchNode.ToQueryNode();
 }
 
 public readonly record struct PropertySetStatement(ValueTerm.Property Prop, ValueTerm Value);

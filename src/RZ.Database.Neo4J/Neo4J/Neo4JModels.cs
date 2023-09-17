@@ -21,6 +21,12 @@ public readonly record struct NodeId(string Value)
     public static implicit operator string(NodeId id) => id.Value;
 }
 
+/// <summary>
+/// Node model for creation
+/// </summary>
+/// <param name="NodeType"></param>
+/// <param name="Body"></param>
+/// <param name="Id"></param>
 public readonly record struct Neo4JNode(string? NodeType = null, Neo4JProperties Body = default, NodeId? Id = null)
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

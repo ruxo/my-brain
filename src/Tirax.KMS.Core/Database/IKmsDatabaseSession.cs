@@ -2,11 +2,6 @@
 
 namespace Tirax.KMS.Database;
 
-public interface IKmsDatabase
-{
-    IKmsDatabaseSession Session();
-}
-
 public interface IKmsDatabaseSession : IAsyncDisposable
 {
     Task<LinkObject> CreateLink(ConceptId owner, Option<string> name, URI uri);

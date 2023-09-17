@@ -32,13 +32,21 @@ public static class Cypher
         Seq<ICypherNode> Nodes => nodes;
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReturnBuilder Returns(ProjectionNode projection) => new(nodes.Add(projection));
+        public ReturnBuilder Returns(ProjectionNode projection) =>
+            new(nodes.Add(projection));
 
         public MergeBuilder Create(Neo4JNode node, params LinkTarget[] targets) =>
-            new(nodes.Add(new CreateNode(node, Seq(targets))));
+            AddNode(new CreateNode(node, Seq(targets)));
 
         public MergeBuilder Set(params AssignmentTerm[] assignments) =>
-            new(nodes.Add(new MatchSetNode(assignments.ToSeq())));
+            AddNode(new MatchSetNode(assignments.ToSeq()));
+
+        public MergeBuilder Where(BooleanTerm boolExpression) =>
+            AddNode(new WhereNode(boolExpression));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        MergeBuilder AddNode(ICypherNode node) =>
+            new(nodes.Add(node));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator string(MergeBuilder builder) => 
@@ -161,6 +169,12 @@ static class CypherStringBuilderExtension
         return sb;
     }
 
+    public static StringBuilder Add(this StringBuilder sb, QueryPathNode path) {
+        sb.Add(path.Head);
+        if (path.Links.Any()) path.Links.Iter(p => sb.Add(p));
+        return sb;
+    }
+
     public static StringBuilder Add(this StringBuilder sb, LabelTerm term) =>
         term switch{
             LabelTerm.Identifier i => sb.Append(i.Name),
@@ -182,6 +196,7 @@ static class CypherStringBuilderExtension
             BooleanTerm.Lte op => sb.Add(op.Left).Append("<=").Add(op.Right),
             BooleanTerm.Gte op => sb.Add(op.Left).Append(">=").Add(op.Right),
             BooleanTerm.Neq op => sb.Add(op.Left).Append("<>").Add(op.Right),
+            BooleanTerm.In op => sb.Add(op.Left).Append(" IN ").Add(op.Right),
             
             BooleanTerm.And op => sb.Add(op.Left).Append(" AND ").Add(op.Right),
             BooleanTerm.Or op => sb.Add(op.Left).Append(" OR ").Add(op.Right),
