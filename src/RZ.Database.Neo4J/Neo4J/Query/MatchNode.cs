@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Runtime.CompilerServices;
+using System.Text;
 using Seq = LanguageExt.Seq;
 
 namespace RZ.Database.Neo4J.Query;
@@ -13,6 +14,10 @@ public sealed record MatchNode(QueryNode Head, Seq<LinkNode> Links, string? Id =
     
     public static implicit operator MatchNode((string Id, string Label, Neo4JProperties Body) x) =>
         new(new(){ Id = x.Id, LabelExpression = (LabelTerm)x.Label, Body = x.Body }, Seq.empty<LinkNode>());
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator MatchNode(QueryPathNode path) =>
+        new(path.Head, path.Links);
     
     public StringBuilder ToCommandString(StringBuilder sb) {
         sb.Append("MATCH ");

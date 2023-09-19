@@ -52,4 +52,11 @@ public static class Prelude
     public static ValueTerm Call(string name, params ValueTerm[] parameters ) => new ValueTerm.FunctionCall(name, parameters.ToSeq());
     
     #endregion
+    
+    #region BooleanTerm
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BooleanTerm Contains(ValueTerm item, ValueTerm collection) => new BooleanTerm.In(item, collection);
+
+    #endregion
 }

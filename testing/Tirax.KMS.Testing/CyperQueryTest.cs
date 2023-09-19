@@ -45,14 +45,15 @@ public sealed class CyperQueryTest
 
     [Fact]
     public void TestProjections() {
-        string query = 
-        Cypher.Match(("concept", "Concept"))
-              .Where(FunctionCall.Of("elementId", Var("concept")) == Param("conceptId"))
-              .Return(new(Seq(Direct(Var("concept")),
-                               Alias("contains", Select(QueryNode.AnyWithId("concept").LinkTo("CONTAINS", QueryNode.AnyWithId("sub")), Call("elementId", Var("sub")))),
-                               Alias("links", Select(QueryNode.AnyWithId("concept").LinkTo("REFERS", QueryNode.AnyWithId("links")), Call("elementId", Var("links")))),
-                               Alias("tags", Select(QueryNode.AnyWithId("concept").LinkTo("TAGS", QueryNode.AnyWithId("tags")), Call("elementId", Var("tags"))))
-                               )));
+        string query =
+            Cypher.Match(("concept", "Concept"))
+                  .Where(FunctionCall.Of("elementId", Var("concept")) == Param("conceptId"))
+                  .Return(Direct(Var("concept")),
+                          Alias("contains",
+                                Select(QueryNode.AnyWithId("concept").LinkTo("CONTAINS", QueryNode.AnyWithId("sub")), Call("elementId", Var("sub")))),
+                          Alias("links",
+                                Select(QueryNode.AnyWithId("concept").LinkTo("REFERS", QueryNode.AnyWithId("links")), Call("elementId", Var("links")))),
+                          Alias("tags", Select(QueryNode.AnyWithId("concept").LinkTo("TAGS", QueryNode.AnyWithId("tags")), Call("elementId", Var("tags")))));
         query.Should()
              .Be("MATCH (concept:Concept)\nWHERE elementId(concept)=$conceptId\n" +
                  "RETURN concept,[(concept)-[:CONTAINS]->(sub)|elementId(sub)] AS contains,[(concept)-[:REFERS]->(links)|elementId(links)] AS links," +
