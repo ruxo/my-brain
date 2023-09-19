@@ -2,10 +2,11 @@
 
 namespace RZ.Database.Neo4J.Query;
 
-public sealed class CreateNode(Neo4JNode node, Seq<LinkTarget> targets) : ICypherNode
+public sealed class CreateNode(Seq<QueryPathNode> paths) : ICypherNode
 {
     public StringBuilder ToCommandString(StringBuilder sb) => 
-        sb.Append("CREATE ").Add(node).Add(targets);
+        sb.Append("CREATE ")
+          .Join(',', paths, (inner, p) => inner.Add(p));
 }
 
 public sealed class MatchSetNode(Seq<AssignmentTerm> assignments) : ICypherNode {

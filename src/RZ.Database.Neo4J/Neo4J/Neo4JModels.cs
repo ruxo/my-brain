@@ -1,4 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
+using RZ.Database.Neo4J.Query;
 using Seq = LanguageExt.Seq;
 
 namespace RZ.Database.Neo4J;
@@ -38,16 +39,23 @@ public readonly record struct Neo4JNode(string? NodeType = null, Neo4JProperties
         new(nodeType, new(Seq(properties)));
 }
 
-public readonly record struct Neo4JProperty(string Name, object? Value)
+public readonly record struct Neo4JProperty(string Name, ValueTerm Value)
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Neo4JProperty(in (string name, string? value) property) => new(property.name, property.value);
+    public static implicit operator Neo4JProperty(in (string name, string? value) property) =>
+        new(property.name, property.value);
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Neo4JProperty(in (string name, bool value) property) => new(property.name, property.value);
+    public static implicit operator Neo4JProperty(in (string name, bool value) property) =>
+        new(property.name, property.value);
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Neo4JProperty(in (string name, int value) property) => new(property.name, property.value);
+    public static implicit operator Neo4JProperty(in (string name, int value) property) =>
+        new(property.name, property.value);
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator Neo4JProperty(in (string name, ValueTerm value) property) =>
+        new(property.name, property.value);
 }
 
 public readonly record struct Neo4JProperties(Seq<Neo4JProperty> Properties)
@@ -67,3 +75,5 @@ public readonly record struct NodeFields(Seq<string> Fields)
     public static implicit operator NodeFields(Seq<string> fields) => new(fields);
     public static implicit operator NodeFields(string field) => new(Seq1(field));
 }
+
+public readonly record struct Neo4JPath(Neo4JNode Head, Seq<LinkTarget> Targets);

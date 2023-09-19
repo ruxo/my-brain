@@ -32,11 +32,15 @@ public static class Cypher
         Seq<ICypherNode> Nodes => nodes;
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReturnBuilder Returns(ProjectionNode projection) =>
+        public ReturnBuilder Return(ProjectionNode projection) =>
             new(nodes.Add(projection));
 
-        public MergeBuilder Create(Neo4JNode node, params LinkTarget[] targets) =>
-            AddNode(new CreateNode(node, Seq(targets)));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ReturnBuilder Return(params ProjectionTerm[] terms) =>
+            new(nodes.Add(new ProjectionNode(terms.ToSeq())));
+
+        public MergeBuilder Create(params QueryPathNode[] path) =>
+            AddNode(new CreateNode(path.ToSeq()));
 
         public MergeBuilder Set(params AssignmentTerm[] assignments) =>
             AddNode(new MatchSetNode(assignments.ToSeq()));
@@ -97,7 +101,7 @@ static class CypherStringBuilderExtension
         sb.Join(',', nodeFields.Fields, (inner, field) => inner.Add(nodeName).Add(PropertyDelimiter).Add(field));
 
     public static StringBuilder Add(this StringBuilder sb, Neo4JProperty property, char delimiter = PropertyDelimiter) =>
-        sb.Add(property.Name).Add(delimiter).AddValue(property.Value);
+        sb.Add(property.Name).Add(delimiter).Add(property.Value);
 
     public static StringBuilder Add(this StringBuilder sb, Neo4JProperties properties) =>
         properties.Properties.HeadOrNone()
@@ -210,6 +214,7 @@ static class CypherStringBuilderExtension
             ValueTerm.Constant c => sb.AddValue(c.Value),
             ValueTerm.Variable v => sb.Append(v.Name),
             ValueTerm.Property p => sb.Append(p.NodeId).Add('.').Append(p.Field),
+            ValueTerm.Parameter p => sb.Append('$').Append(p.Name),
             ValueTerm.FunctionCall f => sb.Append(f.Name).Add('(').Join(',', f.Parameters, (inner,v) => inner.Add(v)).Add(')'),
             
             _ => throw new NotImplementedException($"Term {term} is not yet implemented!")

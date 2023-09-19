@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using Seq = LanguageExt.Seq;
+using static RZ.Database.Neo4J.Prelude;
 
 namespace RZ.Database.Neo4J.Query;
 
@@ -21,29 +22,40 @@ public record LabelTerm
     LabelTerm(){}
 }
 
-public record ValueTerm
+#pragma warning disable CS0660, CS0661
+public abstract class ValueTerm
+#pragma warning restore CS0660, CS0661
 {
-    public sealed record Constant(object Value) : ValueTerm;
-    public sealed record Variable(string Name) : ValueTerm;
-    public sealed record Property(string NodeId, string Field) : ValueTerm;
-    public sealed record Parameter(string Name) : ValueTerm;
+    public sealed class Constant(object? value) : ValueTerm
+    {
+        public object? Value => value;
+    }
+    public sealed class Variable(string name) : ValueTerm
+    {
+        public string Name => name;
+    }
 
-    public sealed record FunctionCall(string Name, Seq<ValueTerm> Parameters) : ValueTerm
+    public sealed class Property(string nodeId, string field) : ValueTerm
+    {
+        public string NodeId => nodeId;
+        public string Field => field;
+    }
+
+    public sealed class Parameter(string name) : ValueTerm
+    {
+        public string Name => name;
+    }
+
+    public sealed class FunctionCall(string name, Seq<ValueTerm> parameters) : ValueTerm
     {
         public static FunctionCall Of(string name, params ValueTerm[] parameters) => new(name, Seq(parameters));
+        
+        public string Name => name;
+        public Seq<ValueTerm> Parameters => parameters;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ValueTerm Var(string variable) => new Variable(variable);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ValueTerm Param(string variable) => new Parameter(variable);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ValueTerm Call(string name, params ValueTerm[] parameters ) => new FunctionCall(name, parameters.ToSeq());
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator ValueTerm(string value) => new Constant(value);
+    public static implicit operator ValueTerm(string? value) => new Constant(value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ValueTerm(int value) => new Constant(value);
@@ -53,6 +65,14 @@ public record ValueTerm
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ValueTerm(in (string nodeId, string field) x) => new Property(x.nodeId, x.field);
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BooleanTerm operator ==(ValueTerm lhs, ValueTerm rhs) =>
+        new BooleanTerm.Eq(lhs, rhs);
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BooleanTerm operator !=(ValueTerm lhs, ValueTerm rhs) =>
+        new BooleanTerm.Neq(lhs, rhs);
     
     ValueTerm() {}
 }
@@ -87,12 +107,14 @@ public record ProjectionTerm
     public sealed record Direct(ValueTerm Value) : ProjectionTerm;
     public sealed record Alias(string Name, ProjectionTerm Term) : ProjectionTerm;
     public sealed record Select(QueryPathNode Pattern, ValueTerm Projection) : ProjectionTerm;
+    public sealed record SelectNone : ProjectionTerm;
 
     public StringBuilder ToCommandString(StringBuilder sb) =>
         this switch{
             Direct d => sb.Add(d.Value),
             Alias a  => a.Term.ToCommandString(sb).Append(" AS ").Append(a.Name),
             Select s => sb.Append('[').Add(s.Pattern).Append('|').Add(s.Projection).Append(']'),
+            SelectNone _ => sb.Append("[]"),
 
             _ => throw new NotImplementedException($"Command {this} is not yet implemented!")
         };
@@ -107,7 +129,7 @@ public sealed class QueryNode
 {
     public Option<string> Id { get; init; }
     public Option<LabelTerm> LabelExpression { get; init; }
-    public Neo4JProperties Body { get; init; } = default;
+    public Neo4JProperties Body { get; init; }
     public Option<BooleanTerm> WhereExpression { get; init; }
 
     public static readonly QueryNode Any = new();
@@ -117,13 +139,21 @@ public sealed class QueryNode
 
     public static implicit operator QueryNode(string label) =>
         new(){ LabelExpression = (LabelTerm)label };
+    
+    public static implicit operator QueryNode((string Id, string Label) x) =>
+        new(){ Id = x.Id, LabelExpression = (LabelTerm)x.Label };
+    
+    public static implicit operator QueryNode((string Id, string Label, Neo4JProperties Body) x) =>
+        new(){ Id = x.Id, LabelExpression = (LabelTerm)x.Label, Body = x.Body };
 
     public static MatchNodeBuilder Of(LabelTerm labelExpr, params Neo4JProperty[] properties) => 
         new(new(){ LabelExpression = labelExpr, Body = new(Seq(properties)) }, Seq.empty<LinkNode>());
 
-    public static MatchNodeBuilder Of(LabelTerm labelExpr, string? id = null, params Neo4JProperty[] properties) => 
+    public static MatchNodeBuilder Of(string id, LabelTerm labelExpr, params Neo4JProperty[] properties) => 
         new(new(){ Id = Optional(id), LabelExpression = labelExpr, Body = new(Seq(properties)) }, Seq.empty<LinkNode>());
-    
+
+    public static QueryNode From(string? type = null, Neo4JProperties body = default, string? id = null) =>
+        new(){ Id = Optional(id), LabelExpression = type is null ? None : Some((LabelTerm)type), Body = body };
 }
 
 public readonly record struct Qualifier(int LowerBound = 1, int? UpperBound = null)
@@ -137,11 +167,24 @@ public readonly record struct Qualifier(int LowerBound = 1, int? UpperBound = nu
     /// Represent <c>+</c> qualifier, which is equivalent to <c>{1,}</c>.
     /// </summary>
     public static readonly Qualifier AtLeastOnce = new();
+    
 }
-public readonly record struct QueryLink(QueryNode? Link = null, LinkDirection Direction = LinkDirection.ToRight, Qualifier? Qualifier = null);
+
+public readonly record struct QueryLink(QueryNode? Link = null, LinkDirection Direction = LinkDirection.ToRight, Qualifier? Qualifier = null)
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator QueryLink(string name) =>
+        new(name);
+}
+
 public readonly record struct LinkNode(QueryLink Link, QueryNode Target);
 
-public readonly record struct QueryPathNode(QueryNode Head, Seq<LinkNode> Links);
+public readonly record struct QueryPathNode(QueryNode Head, Seq<LinkNode> Links)
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator QueryPathNode(QueryNode head) =>
+        new(head, Seq.empty<LinkNode>());
+}
 
 public readonly struct MatchNodeBuilder(QueryNode head, Seq<LinkNode> links)
 {
@@ -185,7 +228,7 @@ public record ResultOrderBy
     public sealed record Descending(ValueTerm Value) : ResultOrderBy;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator ResultOrderBy(string variable) => new Ascending(ValueTerm.Var(variable));
+    public static implicit operator ResultOrderBy(string variable) => new Ascending(Var(variable));
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ResultOrderBy Desc(ValueTerm term) => new Descending(term);

@@ -1,5 +1,6 @@
 ﻿using RZ.Database.Neo4J;
 using Tirax.KMS.Migration.Core;
+using static RZ.Database.Neo4J.Prelude;
 
 namespace Tirax.KMS.Migration.Migrations;
 
@@ -15,9 +16,9 @@ public sealed class Initial : IMigration {
     }
     
     public async ValueTask DataUp(IQueryRunner runner) {
-        var home = new Neo4JNode("Bookmark", Seq1(("label", "home")));
-        var brain = new Neo4JNode("Concept", Seq1(("name", "Brain")));
-        await runner.CreateNode(home, new LinkTarget("POINT", brain));
+        var home = N(type: "Bookmark", body: Props(("label", "home")));
+        var brain = N(type: "Concept", body: Props(("name", "Brain")));
+        await runner.CreateNode(P(home, L("POINT", brain)));
     }
 
     public async ValueTask DataDown(IQueryRunner runner) {

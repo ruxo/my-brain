@@ -2,6 +2,7 @@
 using System.Text;
 using Neo4j.Driver;
 using RZ.Database.Neo4J.Query;
+using static RZ.Database.Neo4J.Prelude;
 
 namespace RZ.Database.Neo4J;
 
@@ -31,8 +32,8 @@ public static class CypherCommands
     public static ValueTask<IResultSummary> DeleteFullTextIndex(this IQueryRunner runner, string indexName) => 
         runner.Write($"DROP INDEX {indexName}");
 
-    public static async ValueTask<IResultSummary> CreateNode(this IQueryRunner runner, Neo4JNode node, params LinkTarget[] targets) {
-        var n = new CreateNode(node, targets.ToSeq());
+    public static async ValueTask<IResultSummary> CreateNode(this IQueryRunner runner, QueryPathNode path) {
+        var n = new CreateNode(Seq1(path));
         var query = n.ToCommandString(new (128)).ToString();
         return await runner.Write(query);
     }

@@ -243,7 +243,7 @@ public sealed partial class KmsServer : IKmsServer
 
         public static TransactionResult<(Concept, LinkObject)> CreateLink(INeo4JTransaction session, Concept owner, Option<string> name, URI uri) =>
             async state => {
-                var link = await session.Write(q => q.CreateLink(owner.Id, name, uri));
+                var link = await session.Write(q => q.CreateLink(owner.Id, name.ToNullable(), uri));
                 var updated = owner with{ Links = owner.Links.Add(link.Id) };
                 var newState = state with{
                     Concepts = state.Concepts.AddOrUpdate(updated.Id, updated),

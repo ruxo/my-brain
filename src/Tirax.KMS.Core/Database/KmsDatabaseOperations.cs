@@ -1,28 +1,48 @@
 ﻿using RZ.Database.Neo4J;
 using RZ.Database.Neo4J.Query;
 using Tirax.KMS.Domain;
+using static RZ.Database.Neo4J.Prelude;
 using static RZ.Database.Neo4J.Query.ValueTerm;
 
 namespace Tirax.KMS.Database;
 
 public static class KmsDatabaseOperations
 {
-    public static ValueTask<LinkObject> CreateLink(this IQueryRunner runner, ConceptId owner, Option<string> name, URI uri){
-        throw new NotImplementedException();
-    }
-    
-    public static ValueTask<Concept> CreateSubConcept(this IQueryRunner runner, ConceptId owner, string name){
-        throw new NotImplementedException();
+    internal static readonly string CreateLinkQuery =
+        Cypher.Match(("owner", "Concept"))
+              .Where(Call("elementId", Var("owner")) == Param("oid"))
+              .Create(N("link", "LinkObject", Props(("name", Param("name")), ("uri", Param("uri")))),
+                      P(N("owner"), L("REFERS", N("link"))))
+              .Return("link");
+    public static async ValueTask<LinkObject> CreateLink(this IQueryRunner runner, ConceptId owner, string? name, URI uri) {
+        var cursor = await runner.Read(CreateLinkQuery, new{ oid=owner.Value, name, uri = uri.Value });
+        return await cursor.FetchAsync() ? cursor.Current.ToLinkObject() : throw new InvalidOperationException("Impossible case");
     }
 
+    internal static readonly string CreateSubConceptQuery =
+        Cypher.Match(("owner", "Concept"))
+              .Where(Call("elementId", Var("owner")) == Param("oid"))
+              .Create(N("concept", "Concept", Props(("name", Param("name")))),
+                      P(N("owner"), L("CONTAINS", N("concept"))))
+              .Return(Direct(Var("concept")), Alias("contains", SelectNone()), Alias("links", SelectNone()), Alias("tags", SelectNone()));
+                         
+    public static async ValueTask<Concept> CreateSubConcept(this IQueryRunner runner, ConceptId owner, string name){
+        var cursor = await runner.Read(CreateSubConceptQuery, new{oid=owner.Value, name});
+        return await cursor.FetchAsync() ? cursor.Current.ToConcept() : throw new InvalidOperationException("Impossible case");
+    }
+
+    static Cypher.ReturnBuilder ReturnConcept(Cypher.MergeBuilder mb) =>
+        mb.Return(Direct(Var("concept")),
+                  Alias("contains",
+                        Select(QueryNode.AnyWithId("concept").LinkTo("CONTAINS", QueryNode.AnyWithId("sub")), Call("elementId", Var("sub")))),
+                  Alias("links",
+                        Select(QueryNode.AnyWithId("concept").LinkTo("REFERS", QueryNode.AnyWithId("links")), Call("elementId", Var("links")))),
+                  Alias("tags", Select(QueryNode.AnyWithId("concept").LinkTo("TAGS", QueryNode.AnyWithId("tags")), Call("elementId", Var("tags")))));
+
     static readonly string FetchConceptQuery =
-        Cypher.Match(QueryNode.Of("Concept", "concept"))
-              .Where(new BooleanTerm.Eq(FunctionCall.Of("elementId", Var("concept")), Param("conceptId")))
-              .Returns(new(Seq(Projection.Direct("concept"),
-                               Projection.Select(QueryNode.AnyWithId("concept").LinkTo("CONTAINS", QueryNode.AnyWithId("sub")), Call("elementId", Var("sub"))),
-                               Projection.Select(QueryNode.AnyWithId("concept").LinkTo("REFERS", QueryNode.AnyWithId("links")), Call("elementId", Var("links"))),
-                               Projection.Select(QueryNode.AnyWithId("concept").LinkTo("TAGS", QueryNode.AnyWithId("tags")), Call("elementId", Var("tags")))
-                               )));
+        ReturnConcept(Cypher.Match(("owner", "Concept"))
+                            .Where(new BooleanTerm.Eq(FunctionCall.Of("elementId", Var("concept")), Param("conceptId"))));
+    
     public static async ValueTask<Concept?> FetchConcept(this IQueryRunner runner, ConceptId conceptId) {
         var cursor = await runner.Read(FetchConceptQuery, new { conceptId });
         return await cursor.FetchAsync() ? cursor.Current.ToConcept() : null;
@@ -36,7 +56,7 @@ public static class KmsDatabaseOperations
         throw new NotImplementedException();
     }
 
-    static readonly string GetTagsQuery = Cypher.Match(QueryNode.Of("Tag", "tag")).Returns("tag");
+    static readonly string GetTagsQuery = Cypher.Match(QueryNode.Of("tag", "Tag")).Return("tag");
     public static async ValueTask<Seq<ConceptTag>> GetTags(this IQueryRunner runner) {
         var cursor = await runner.Read(GetTagsQuery);
         var data = await cursor.ToArrayAsync();

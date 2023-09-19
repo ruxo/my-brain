@@ -3,6 +3,7 @@ using Neo4j.Driver;
 using RZ.Database.Neo4J;
 using RZ.Database.Neo4J.Query;
 using Seq = LanguageExt.Seq;
+using static RZ.Database.Neo4J.Prelude;
 
 namespace Tirax.KMS.Migration.Core;
 
@@ -67,8 +68,8 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         const string ResultVar = "p";
         var bookmark = QueryNode.Of("Bookmark", ("label", "migration"), ("latest", true));
         string query = Cypher.Match(bookmark.LinkTo("MIGRATE", QueryNode.Any, Qualifier.Any).ToPath(ResultVar))
-                             .Returns(ResultVar)
-                             .OrderBy(ResultOrderBy.Desc(ValueTerm.FunctionCall.Of("length", ValueTerm.Var(ResultVar))))
+                             .Return(ResultVar)
+                             .OrderBy(ResultOrderBy.Desc(ValueTerm.FunctionCall.Of("length", Var(ResultVar))))
                              .Limit(1);
         var record = await db.Read(async runner => {
             var cursor = await runner.Read(query);
@@ -82,7 +83,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
             Downgraded = DateTime.UtcNow
         };
         
-        string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", migrationNode.Id.ToString())))
+        string query = Cypher.Match(QueryNode.Of("n", "Migration", ("id", migrationNode.Id.ToString())))
                              .Set((("n", "downgraded"), migrationNode.Downgraded.Value.ToString("O")));
         await tx.Write(migration.SchemaDown);
         await tx.Write(async runner => {
@@ -101,7 +102,7 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
                                                   .TakeWhile(m => m.Downgraded is null)
                                                   .Map(m => m with { Id = Guid.NewGuid() }));
 
-        string query = Cypher.Match(QueryNode.Of("Bookmark", "n", ("version", history.Version)))
+        string query = Cypher.Match(QueryNode.Of("n", "Bookmark", ("version", history.Version)))
                              .Set((("n", "latest"), false));
         await tx.Write(async runner => {
             await runner.Write(query);
@@ -112,17 +113,17 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
 
     static async ValueTask<MigrationInfo> Upgrade(INeo4JTransaction tx, MigrationInfo history, IMigration migration) {
         var newMigration = new MigrationRecord(Guid.NewGuid(), migration.Version, migration.Name, DateTime.UtcNow);
-        var target = newMigration.ToNeo4JNode();
         var version = history.Version + 1;
         var newHistory = new MigrationInfo(version, history.Migrations.Add(newMigration));
 
         var bookmarkExisted = history.Latest.IfSome(out var latest);
         if (bookmarkExisted) {
-            string bookmarkUpdate = Cypher.Match(QueryNode.Of("Bookmark", "n", ("version", history.Version)))
+            string bookmarkUpdate = Cypher.Match(("n", "Bookmark", Props(("version", history.Version))))
                                           .Set((("n", "version"), newHistory.Version));
             
-            string query = Cypher.Match(QueryNode.Of("Migration", "n", ("id", latest.Id.ToString())))
-                                 .Create(Neo4JNode.Of(id: "n"), new LinkTarget("MIGRATE", target));
+            var target = newMigration.ToQueryNode();
+            string query = Cypher.Match(QueryNode.Of("n", "Migration", ("id", latest.Id.ToString())))
+                                 .Create(P(N(id: "n"), L("MIGRATE", target)));
             await tx.Write(migration.SchemaUp);
             await tx.Write(async runner => {
                 await migration.DataUp(runner);
@@ -141,9 +142,9 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
     }
 
     static async ValueTask<Unit> CreateMigrationHistory(IQueryRunner runner, MigrationInfo history) {
-        var node = Neo4JNode.Of("Bookmark", ("label", "migration"), ("latest", true), ("version", history.Version));
-        var targets = history.Migrations.Map(m => new LinkTarget("MIGRATE", m.ToNeo4JNode()));
-        var n = new CreateNode(node, targets);
+        var node = N(type: "Bookmark", body: Props(("label", "migration"), ("latest", true), ("version", history.Version)));
+        var targets = history.Migrations.Map(m => L("MIGRATE", m.ToQueryNode()));
+        var n = new CreateNode(Seq1(P(node, targets)));
         var query = n.ToCommandString(new (128)).ToString();
         await runner.Write(query);
         return Unit.Default;
@@ -172,6 +173,14 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
                          ("name", Name),
                          ("updated", Updated.ToString("O")),
                          ("downgraded", Downgraded?.ToString("O")));
+
+        public QueryNode ToQueryNode() =>
+            N(id: Id.ToString(),
+              type: "Migration",
+              body: Props(("version", Version.ToString()),
+                          ("name", Name),
+                          ("updated", Updated.ToString("O")),
+                          ("downgraded", Downgraded?.ToString("O"))));
     }
 
     sealed record MigrationInfo(int Version, Seq<MigrationRecord> Migrations)

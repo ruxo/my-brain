@@ -1,19 +1,6 @@
-﻿using System.Runtime.CompilerServices;
-using System.Text;
+﻿using System.Text;
 
 namespace RZ.Database.Neo4J.Query;
-
-public static class Projection
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ProjectionTerm Direct(ValueTerm value) => new ProjectionTerm.Direct(value);
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ProjectionTerm Alias(string name, ProjectionTerm projection) => new ProjectionTerm.Alias(name, projection);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ProjectionTerm Select(QueryPathNode path, ValueTerm projection) => new ProjectionTerm.Select(path, projection);
-}
 
 public sealed record ProjectionNode(Seq<ProjectionTerm> Terms) : ICypherNode
 {
