@@ -10,7 +10,7 @@ namespace Tirax.KMS.Database;
 
 public static class KmsDatabaseOperations
 {
-    static Cypher.ReturnBuilder ReturnConcept(Cypher.MergeBuilder mb) =>
+    static ReturnBuilder ReturnConcept(MergeBuilder mb) =>
         mb.Return(Direct(Var("concept")),
                   Alias("contains",
                         Select(QueryNode.AnyWithId("concept").LinkTo("CONTAINS", QueryNode.AnyWithId("sub")), Call("elementId", Var("sub")))),
@@ -79,25 +79,53 @@ public static class KmsDatabaseOperations
     static readonly string GetHomeQuery =
         ReturnConcept(Cypher.Match(P(N("t", "Bookmark", Props(("label", "home"))), L("POINT", ("concept", "Concept")))));
 
-    public static ValueTask<Seq<ConceptId>> FetchOwners(this IQueryRunner runner, ConceptId conceptId){
-        throw new NotImplementedException();
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueTask<Seq<ConceptId>> FetchOwners(this IQueryRunner runner, ConceptId conceptId) => 
+        runner.GetSequence(FetchOwnersQuery, rec => new ConceptId(rec["id"].As<string>()), new{ cid = conceptId.Value });
+
+    static readonly string FetchOwnersQuery =
+        Cypher.Match(P(("owner", "Concept"), L("CONTAINS", ("concept", "Concept"))))
+              .Where(Call("elementId", Var("concept")) == Param("cid"))
+              .Return(Alias("id", Direct(Call("elementId", "owner"))));
     
-    public static ValueTask<Seq<(ConceptId Id, float Score)>> SearchByConceptName(this IQueryRunner runner, string name, int maxResult){
-        throw new NotImplementedException();
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueTask<Seq<(ConceptId Id, float Score)>> SearchByConceptName(this IQueryRunner runner, string name, int maxResult) => 
+        runner.GetSequence(SearchByConceptNameQuery, Materialization.ToSearchConceptResult, new{ name, maxResult });
+
+    static readonly string SearchByConceptNameQuery =
+        Cypher.Call(Call("db.index.fulltext.queryNodes", "conceptNameIndex", Param("name")), Direct(Var("node")), Direct(Var("score")))
+              .Return(Alias("conceptId", Direct(Call("elementId", Var("node")))), Direct(Var("score")))
+              .Limit(Param("maxResult"));
     
-    public static ValueTask<Seq<(ConceptId Id, float Score)>> SearchByLinkName(this IQueryRunner runner, string name, int maxResult){
-        throw new NotImplementedException();
-    }
+    public static ValueTask<Seq<(ConceptId Id, float Score)>> SearchByLinkName(this IQueryRunner runner, string name, int maxResult) => 
+        runner.GetSequence(SearchByLinkNameQuery, Materialization.ToSearchConceptResult, new{ name, maxResult });
+
+    static readonly string SearchByLinkNameQuery =
+        Cypher.Call(Call("db.index.fulltext.queryNodes", "linkObjectNameIndex", Param("name")), Direct(Var("node")), Direct(Var("score")))
+              .Match(P(("concept", "Concept"), L("REFERS", N("node"))))
+              .Return(Alias("conceptId", Direct(Call("elementId", Var("node")))), Direct(Var("score")))
+              .Limit(Param("maxResult"));
     
-    public static ValueTask<Concept> Update(this IQueryRunner runner, Concept old, Concept @new){
-        throw new NotImplementedException();
+    public static async ValueTask<Concept> Update(this IQueryRunner runner, Concept old, Concept @new){
+        if (old.Name != @new.Name)
+            await runner.Write(UpdateQuery, new{ cid = @new.Id.Value, name = @new.Name });
+        return @new;
     }
+
+    static readonly string UpdateQuery =
+        Cypher.Match(("concept", nameof(Concept)))
+              .Where(Call("elementId", Var("concept")) == Param("cid"))
+              .Set((Field("concept", "name"), Param("name")));
     
-    public static ValueTask RecordUpTime(this IQueryRunner runner, DateTime startTime){
-        throw new NotImplementedException();
+    public static async ValueTask RecordUpTime(this IQueryRunner runner, DateTime startTime){
+        var uptime = DateTime.UtcNow - startTime;
+        await runner.Write(RecordUpTimeQuery, new{ startTime, uptime });
     }
+
+    internal static readonly string RecordUpTimeQuery =
+        Cypher.Merge(N("t", NodeLabels.Bookmark, Props(("label", "uptime"))),
+                     PropSet((Field("t", "startTime"), Param("startTime")), (Field("t", "uptime"), Param("uptime"))),
+                     PropSet((Field("t", "startTime"), Param("startTime")), (Field("t", "uptime"), Param("uptime"))));
 
     static async ValueTask<T?> TryGetSingle<T>(this IQueryRunner runner, string query, Func<IRecord, T> mapper, object? @params = null) {
         var cursor = await runner.Read(query, @params);

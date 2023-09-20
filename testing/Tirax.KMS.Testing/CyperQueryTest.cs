@@ -66,4 +66,11 @@ public sealed class CyperQueryTest
                              .Be("MATCH (owner:Concept)\nWHERE elementId(owner)=$oid\nCREATE (link:LinkObject{name:$name,uri:$uri}),(owner)-[:REFERS]->(link)\n" +
                                  "RETURN link;");
     }
+
+    [Fact]
+    public void MergeStatementTest() {
+        KmsDatabaseOperations.RecordUpTimeQuery.Should()
+                             .Be("MERGE (t:Bookmark{label:'uptime'})\nON CREATE SET t.startTime=$startTime,t.uptime=$uptime\n" +
+                                 "ON MATCH SET t.startTime=$startTime,t.uptime=$uptime;");
+    }
 }

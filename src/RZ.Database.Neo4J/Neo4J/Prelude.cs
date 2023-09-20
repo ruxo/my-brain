@@ -46,6 +46,9 @@ public static class Prelude
     public static ValueTerm Var(string variable) => new ValueTerm.Variable(variable);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueTerm Field(string @object, string name) => new ValueTerm.Property(@object, name);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ValueTerm Param(string variable) => new ValueTerm.Parameter(variable);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -59,4 +62,8 @@ public static class Prelude
     public static BooleanTerm Contains(ValueTerm item, ValueTerm collection) => new BooleanTerm.In(item, collection);
 
     #endregion
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PropertySetNode PropSet(params PropertySetStatement[] setStatements) =>
+        new(setStatements.ToSeq());
 }

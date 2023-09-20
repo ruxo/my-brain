@@ -20,59 +20,15 @@ public static class Cypher
     /// <param name="onCreate"></param>
     /// <param name="onMatch"></param>
     /// <returns></returns>
-    public static MergeBuilder Merge(Neo4JNode node, PropertySetNode? onCreate = null, PropertySetNode? onMatch = null) {
-        throw new NotImplementedException();
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MergeBuilder Merge(QueryNode node, PropertySetNode? onCreate = null, PropertySetNode? onMatch = null) => 
+        MergeBuilder.Empty.Merge(node, onCreate, onMatch);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static MergeBuilder Match(MatchNode match) => new(Seq1<ICypherNode>(match));
+    public static MergeBuilder Match(MatchNode match) => MergeBuilder.Empty.Match(match);
 
-    public readonly struct MergeBuilder(Seq<ICypherNode> nodes)
-    {
-        Seq<ICypherNode> Nodes => nodes;
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReturnBuilder Return(ProjectionNode projection) =>
-            new(nodes.Add(projection));
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReturnBuilder Return(params ProjectionTerm[] terms) =>
-            new(nodes.Add(new ProjectionNode(terms.ToSeq())));
-
-        public MergeBuilder Create(params QueryPathNode[] path) =>
-            AddNode(new CreateNode(path.ToSeq()));
-
-        public MergeBuilder Set(params AssignmentTerm[] assignments) =>
-            AddNode(new MatchSetNode(assignments.ToSeq()));
-
-        public MergeBuilder Where(BooleanTerm boolExpression) =>
-            AddNode(new WhereNode(boolExpression));
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        MergeBuilder AddNode(ICypherNode node) =>
-            new(nodes.Add(node));
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static implicit operator string(MergeBuilder builder) => 
-            new StringBuilder(256).Add(builder.Nodes).Add(CommandTerminationDelimiter).ToString();
-    }
-
-    public readonly record struct ReturnBuilder(Seq<ICypherNode> Commands)
-    {
-        Option<OrderByNode> orderBy { get; init; }
-        Option<int> limit { get; init; }
-
-        public ReturnBuilder OrderBy(params ResultOrderBy[] orders) => this with { orderBy = new OrderByNode(Seq(orders)) };
-        public ReturnBuilder Limit(int n) => this with{ limit = n };
-
-        public static implicit operator string(ReturnBuilder builder) {
-            var sb = new StringBuilder(256);
-            sb.Add(builder.Commands);
-            builder.orderBy.Iter(x => x.ToCommandString(sb.NewLine()));
-            builder.limit.Iter(i => sb.NewLine().Append("LIMIT ").Append(i));
-            return sb.Add(CommandTerminationDelimiter).ToString();
-        }
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MergeBuilder Call(ValueTerm functionCall, params ProjectionTerm[] yield) => MergeBuilder.Empty.Call(functionCall, yield);
 }
 
 static class CypherStringBuilderExtension
@@ -190,6 +146,10 @@ static class CypherStringBuilderExtension
             
             _ => throw new NotImplementedException($"Term {term} is not yet implemented!")
         };
+
+    const char AssignmentOperator = '=';
+    public static StringBuilder Add(this StringBuilder sb, PropertySetStatement statement) => 
+        sb.Add(statement.Prop).Append(AssignmentOperator).Add(statement.Value);
 
     public static StringBuilder Add(this StringBuilder sb, BooleanTerm term) =>
         term switch{

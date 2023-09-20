@@ -219,7 +219,12 @@ public readonly struct MatchNodeBuilder(QueryNode head, Seq<LinkNode> links)
         matchNode.ToQueryNode();
 }
 
-public readonly record struct PropertySetStatement(ValueTerm.Property Prop, ValueTerm Value);
+public readonly record struct PropertySetStatement(ValueTerm Prop, ValueTerm Value)
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator PropertySetStatement(in (ValueTerm Prop, ValueTerm Value) p) =>
+        new(p.Prop, p.Value);
+}
 public readonly record struct PropertySetNode(Seq<PropertySetStatement> Statements);
 
 public record ResultOrderBy
