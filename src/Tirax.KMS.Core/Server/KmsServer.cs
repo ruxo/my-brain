@@ -117,8 +117,8 @@ public sealed partial class KmsServer : IKmsServer
         var owners = state.Owners.Find(id).IfSome(out var result) ? result.ToSeq() : await findOwners();
         return await FetchUnsafe(owners);
 
-        async Task<Seq<ConceptId>> findOwners() => 
-            await Transact(Operations.FindOwners(db, id));
+        Task<Seq<ConceptId>> findOwners() => 
+            Transact(Operations.FindOwners(db, id));
     }
 
     public async ValueTask<Concept> Update(Concept concept) {

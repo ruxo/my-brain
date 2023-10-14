@@ -86,7 +86,7 @@ public static class KmsDatabaseOperations
     static readonly string FetchOwnersQuery =
         Cypher.Match(P(("owner", "Concept"), L("CONTAINS", ("concept", "Concept"))))
               .Where(Call("elementId", Var("concept")) == Param("cid"))
-              .Return(Alias("id", Direct(Call("elementId", "owner"))));
+              .Return(Alias("id", Direct(Call("elementId", Var("owner")))));
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ValueTask<Seq<(ConceptId Id, float Score)>> SearchByConceptName(this IQueryRunner runner, string name, int maxResult) => 
