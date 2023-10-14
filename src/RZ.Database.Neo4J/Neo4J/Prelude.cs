@@ -11,6 +11,9 @@ public static class Prelude
     
     #region Neo4JPath helpers
 
+    /// <summary>
+    /// Neo4J Query Node
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static QueryNode N(string? id = null, string? type = null, Neo4JProperties body = default) =>
         QueryNode.From(type, body, id);
@@ -19,7 +22,14 @@ public static class Prelude
     public static LinkNode L(QueryLink link, QueryNode target) =>
         new(link, target);
 
+    /// <summary>
+    /// Neo4J Path object
+    /// </summary>
     public static QueryPathNode P(QueryNode head, LinkNode link) => new(head, Seq1(link));
+    
+    /// <summary>
+    /// Neo4J Path object
+    /// </summary>
     public static QueryPathNode P(QueryNode head, Seq<LinkNode> links) => new(head, links);
 
     #endregion

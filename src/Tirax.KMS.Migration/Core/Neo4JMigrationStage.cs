@@ -140,10 +140,10 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
         }
         return newHistory;
     }
-
+    
     static async ValueTask<Unit> CreateMigrationHistory(IQueryRunner runner, MigrationInfo history) {
         var node = N(type: "Bookmark", body: Props(("label", "migration"), ("latest", true), ("version", history.Version)));
-        var targets = history.Migrations.Map(m => L("MIGRATE", m.ToQueryNode()));
+        var targets = history.Migrations.Map(m => L("MIGRATE", m.ToNeo4JNode()));
         var n = new CreateNode(Seq1(P(node, targets)));
         var query = n.ToCommandString(new (128)).ToString();
         await runner.Write(query);
@@ -166,13 +166,13 @@ public sealed class Neo4JMigrationStage(INeo4JDatabase db, IEnumerable<IMigratio
                 DateTime.Parse(node["updated"].As<string>()),
                 node.Properties.TryGetValue("downgraded").Map(v => DateTime.Parse((string)v)).ToNullable());
 
-        public Neo4JNode ToNeo4JNode() =>
-            Neo4JNode.Of("Migration",
-                         ("id", Id.ToString()),
-                         ("version", Version.ToString()),
-                         ("name", Name),
-                         ("updated", Updated.ToString("O")),
-                         ("downgraded", Downgraded?.ToString("O")));
+        public QueryNode ToNeo4JNode() =>
+            N(type: "Migration",
+              body: Props(("id", Id.ToString()),
+                          ("version", Version.ToString()),
+                          ("name", Name),
+                          ("updated", Updated.ToString("O")),
+                          ("downgraded", Downgraded?.ToString("O"))));
 
         public QueryNode ToQueryNode() =>
             N(id: Id.ToString(),
