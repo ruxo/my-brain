@@ -9,7 +9,6 @@ using MudBlazor.Services;
 using RZ.Database;
 using RZ.Database.Neo4J;
 using Tirax.KMS;
-using Tirax.KMS.Akka;
 using Tirax.KMS.App.Features.Authentication;
 using Tirax.KMS.App.Services.Akka;
 using Tirax.KMS.App.Services.Interop;
@@ -101,8 +100,8 @@ builder.Services.AddAuthorizationCore(opts => {
                         .Build();
 });
 
-builder.Services.AddSingleton<IActorFacade, AkkaService>();
-builder.Services.AddHostedService<AkkaService>(sp => (AkkaService)sp.GetRequiredService<IActorFacade>());
+builder.Services.AddSingleton<IAppFacade, AkkaService>();
+builder.Services.AddHostedService<AkkaService>(sp => (AkkaService)sp.GetRequiredService<IAppFacade>());
 
 var app = builder.Build();
 

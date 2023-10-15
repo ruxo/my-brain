@@ -1,19 +1,27 @@
 ﻿@page "/"
+@using global::Akka.Actor
+@using Tirax.KMS.Akka.ActorMessages
+
 @attribute [AllowAnonymous]
 @inject NavigationManager NavManager
-@inject AppModel.ViewModel VM
+@inject IAppFacade AppFacade
     
-<MudContainer Class="pa-5" Style="text-align: center">
-    <MudPaper Height="20em" Width="100%" Class="d-flex justify-center align-center mud-theme-primary mb-5">
-        <h1>Tirax Concepts</h1>
-    </MudPaper>
-    <MudFab StartIcon="@Icons.Material.Filled.Lightbulb" Label="My Concepts" OnClick="GoHome" />
-</MudContainer>
+<MudPaper Height="240px" Width="100%" Class="d-flex justify-center align-center mud-theme-primary mb-5 
+rounded-tl-0 rounded-tr-0 rounded-bl-lg rounded-br-lg">
+    <MudText Typo="Typo.h5">Tirax Concepts</MudText>
+</MudPaper>
+<div style="text-align: center">
+    <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Lightbulb" Size="Size.Large" Color="Color.Primary"
+               OnClick="GoHome">
+        My Concepts
+    </MudButton>
+</div>
 
 @code {
 
-    void GoHome() {
-        NavManager.NavigateTo($"/topic/{VM.Home.Id}");
+    async Task GoHome() {
+        var res = await AppFacade.PublicLibrarian.Ask<Librarian.GetRoot.Response>(Librarian.GetRoot.Default);
+        NavManager.NavigateTo($"/topic/{res.Root.Id}");
     }
 
 }

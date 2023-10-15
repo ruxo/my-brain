@@ -4,7 +4,7 @@ using Tirax.KMS.Server;
 
 namespace Tirax.KMS.Akka;
 
-public sealed class ScheduledWorker : ReceiveActor, IWithTimers, IActorFacade
+public sealed class ScheduledWorker : ReceiveActor, IWithTimers
 {
     /// <summary>
     /// Internal use!

@@ -14,6 +14,8 @@ namespace Tirax.KMS.Server;
 public interface IKmsServer : IDisposable
 {
     ValueTask<Concept> GetHome();
+    ValueTask<Seq<ConceptTag>> GetTags();
+    
     ValueTask<Option<Concept>> Fetch(ConceptId id);
     ValueTask<Seq<(Concept Concept, float Score)>> Search(string keyword, int maxResult);
 
@@ -33,7 +35,10 @@ public sealed partial class KmsServer : IKmsServer
     readonly ILogger logger;
     readonly INeo4JDatabase db;
     readonly DateTime startTime = DateTime.UtcNow;
+    
+    [Obsolete]
     Task<State> snapshot;
+    
     readonly BlockingCollection<TransactionTask> inbox = new();
     readonly ManualResetEventSlim inboxQuit = new();
     bool isDisposed;
@@ -62,10 +67,11 @@ public sealed partial class KmsServer : IKmsServer
         inbox.Dispose();
     }
 
-    public async ValueTask<Concept> GetHome() {
-        var state = await snapshot;
-        return state.Concepts[state.Home.Get()];
-    }
+    public ValueTask<Concept> GetHome() => 
+        db.Read(r => r.GetHome());
+
+    public ValueTask<Seq<ConceptTag>> GetTags() => 
+        db.Read(r => r.GetTags());
 
     public async ValueTask<Option<Concept>> Fetch(ConceptId id) {
         var state = await snapshot;

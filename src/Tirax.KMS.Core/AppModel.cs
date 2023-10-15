@@ -6,7 +6,7 @@ using Unit = System.Reactive.Unit;
 
 namespace Tirax.KMS;
 
-public static class AppModel
+public sealed class AppModel
 {
     public const int MaxHistory = 10;
 

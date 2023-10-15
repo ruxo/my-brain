@@ -8,10 +8,10 @@ namespace Tirax.KMS.App.Pages.Auth;
 [AllowAnonymous]
 public class Login : PageModel
 {
-    public async Task OnGet(string? redirectUri) {
+    public Task OnGet(string? redirectUri) {
         var props = new AuthenticationProperties{
             RedirectUri = redirectUri ?? "/"
         };
-        await HttpContext.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme, props);
+        return HttpContext.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme, props);
     }
 }
