@@ -9,6 +9,7 @@ using MudBlazor.Services;
 using RZ.Database;
 using RZ.Database.Neo4J;
 using Tirax.KMS;
+using Tirax.KMS.App;
 using Tirax.KMS.App.Features.Authentication;
 using Tirax.KMS.App.Services.Akka;
 using Tirax.KMS.App.Services.Interop;
@@ -35,6 +36,8 @@ builder.Services.AddSingleton(sp => {
     var server = sp.GetRequiredService<IKmsServer>();
     return new AppModel.ViewModel(homeId, server);
 });
+
+builder.Services.AddScoped<Session>();
 
 builder.Services.AddMudServices();
 

@@ -1,0 +1,46 @@
+﻿<div class="@EffectiveClass">
+    @if (AdornmentStart is not null) {
+        <span class="adorn-start">@AdornmentStart</span>
+    }
+    <span class="search-input">
+        @if (Finder is null) {
+            <MudTextField Placeholder="@Placeholder" Variant="Variant.Text" id="start" Immediate="true" 
+                          Value="@Value" ValueChanged="ValueChanged"
+                          OnKeyUp="@OnTyping"/>
+        } else {
+            <MudAutocomplete Placeholder="@Placeholder" ResetValueOnEmptyText="true" Variant="Variant.Text" SearchFunc="Finder"
+                         @bind-Value="@Value" CoerceText="false" CoerceValue="false" id="start" />
+        }
+    </span>
+    @if (AdornmentEnd is not null) {
+        <span class="adorn-end">@AdornmentEnd</span>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public RenderFragment? AdornmentStart { get; set; }
+
+    [Parameter]
+    public RenderFragment? AdornmentEnd { get; set; }
+
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public string Value { get; set; } = string.Empty;
+    
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter]
+    public Func<string,Task<IEnumerable<string>>>? Finder {get; set;}
+    
+    [Parameter]
+    public EventCallback<KeyboardEventArgs> OnTyping { get; set; }
+
+    string EffectiveClass => $"search {Class ?? string.Empty}";
+}

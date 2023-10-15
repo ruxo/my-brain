@@ -10,4 +10,9 @@ public static class Librarian
 
         public sealed record Response(Concept Root);
     }
+
+    public sealed record GetConcept(ConceptId Id)
+    {
+        public sealed record Response(Concept? Concept);
+    }
 }

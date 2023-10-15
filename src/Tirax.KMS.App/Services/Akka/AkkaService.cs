@@ -2,7 +2,9 @@
 using Akka.Actor.Setup;
 using Akka.Configuration;
 using Akka.DependencyInjection;
+using RZ.Database.Neo4J;
 using Tirax.KMS.Akka;
+using Tirax.KMS.Database;
 using Tirax.KMS.Server;
 
 namespace Tirax.KMS.App.Services.Akka;
@@ -32,11 +34,10 @@ public sealed class AkkaService : IHostedService, IAppFacade
     public async Task StartAsync(CancellationToken cancellationToken) {
         var sys = system.Value;
             
-        var kmsSystem = serviceProvider.GetRequiredService<IKmsServer>();
-        var publicRoot = await kmsSystem.GetHome();
-        var publicTags = await kmsSystem.GetTags();
+        var db = serviceProvider.GetRequiredService<INeo4JDatabase>();
+        var (root, tags) = await db.Read(async q => (await q.GetHome(), await q.GetTags()));
 
-        PublicLibrarian = sys.ActorOf(Props.Create(() => new Librarian(kmsSystem, publicRoot, publicTags)), "public-librarian");
+        PublicLibrarian = sys.ActorOf(Props.Create(() => new Librarian(db, root, tags)), "public-librarian");
         
         var resolver = DependencyResolver.For(sys);
         var workerProps = resolver.Props<ScheduledWorker>();

@@ -1,16 +1,57 @@
 ﻿@page "/topic/{TopicId}"
+@using Tirax.KMS.Domain
+@using global::Akka.Actor
+@using Tirax.KMS.Akka.ActorMessages
+@using Tirax.KMS.Extensions
 @attribute [Authorize]
-@inherits ReactiveComponentBase<Topic.VModel>
 
-<MudBreadcrumbs Separator="⪧" Items="ViewModel!.Breadcrumbs">
-    <ItemTemplate Context="item">
-        <MudLink Color="Color.Secondary" Disabled="item.Disabled" OnClick="() => OnConceptSelected(item.Href!)">
-            @item.Text
-        </MudLink>
-    </ItemTemplate>
-</MudBreadcrumbs>
-<div class="ma-3 pa-3">
-    <LoadingSection Value="AppModel.CurrentConcept" Context="concept">
-        <View><ConceptDetails Concept="concept" OnConceptSelected="OnConceptSelected"/></View>
-    </LoadingSection>
-</div>
+@inject NavigationManager NavManager
+@inject IAppFacade AppFacade
+@inject Session Session
+
+<AuthorizeView>
+    <MudStack Class="py-4">
+        <MudStack Class="px-4">
+            <SearchBar Placeholder="Search concept">
+                <AdornmentStart>
+                    <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit"/>
+                </AdornmentStart>
+                <AdornmentEnd>
+                    <MudAvatar Color="Color.Inherit">@context.User.GetShortName()</MudAvatar>
+                </AdornmentEnd>
+            </SearchBar>
+            <MudText Typo="Typo.h4">@currentConcept?.Name</MudText>
+        </MudStack>
+        <MudTabs Color="Color.Primary" MinimumTabWidth="120px">
+            <MudTabPanel Text="Sub-concepts">
+                sub-concepts
+            </MudTabPanel>
+            <MudTabPanel Text="References">
+                references
+            </MudTabPanel>
+            <MudTabPanel Text="Ideas">
+                ideas
+            </MudTabPanel>
+            </MudTabs>
+    </MudStack>
+</AuthorizeView>
+
+@code {
+
+    [Parameter]
+    public required string TopicId { get; set; }
+
+    Concept? currentConcept;
+
+    protected override async Task OnInitializedAsync() {
+        var response = await AppFacade.PublicLibrarian.Ask<Librarian.GetConcept.Response>(new Librarian.GetConcept(TopicId));
+
+        currentConcept = response.Concept;
+        if (currentConcept is not null)
+            Session.Breadcrumbs.Add(new(currentConcept.Name, currentConcept.Id));
+    }
+
+    void OnConceptSelected(ConceptId cid) {
+        NavManager.NavigateTo($"/topic/{cid}");
+    }
+}
