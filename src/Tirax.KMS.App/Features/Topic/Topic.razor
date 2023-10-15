@@ -3,6 +3,7 @@
 @using global::Akka.Actor
 @using Tirax.KMS.Akka.ActorMessages
 @using Tirax.KMS.Extensions
+@using System.Diagnostics
 @attribute [Authorize]
 
 @inject NavigationManager NavManager
@@ -24,7 +25,11 @@
         </MudStack>
         <MudTabs Color="Color.Primary" MinimumTabWidth="120px">
             <MudTabPanel Text="Sub-concepts">
-                sub-concepts
+                <MudTreeView Items="@subConcepts" Hover="true" Dense="true" T="ConceptListItem">
+                    <ItemTemplate Context="item">
+                        <MudTreeViewItem Text="@item.Concept.Name" Items="@item.SubConcepts" Value="item" Expanded="true" />
+                    </ItemTemplate>
+                </MudTreeView>
             </MudTabPanel>
             <MudTabPanel Text="References">
                 references
@@ -42,16 +47,31 @@
     public required string TopicId { get; set; }
 
     Concept? currentConcept;
+    HashSet<ConceptListItem> subConcepts;
 
     protected override async Task OnInitializedAsync() {
         var response = await AppFacade.PublicLibrarian.Ask<Librarian.GetConcept.Response>(new Librarian.GetConcept(TopicId));
 
         currentConcept = response.Concept;
-        if (currentConcept is not null)
+        if (currentConcept is not null) {
             Session.Breadcrumbs.Add(new(currentConcept.Name, currentConcept.Id));
+            subConcepts = await BuildTree(currentConcept, 3);
+        }
+    }
+
+    async ValueTask<HashSet<ConceptListItem>> BuildTree(Concept source, int depth) {
+        if (depth == 0) return new();
+        
+        var (subConcepts, invalids) = await AppFacade.PublicLibrarian.Ask<Librarian.GetConcepts.Response>(new Librarian.GetConcepts(source.Contains.ToSeq()));
+        Debug.Assert(invalids.IsEmpty);
+
+        var complete = await subConcepts.Values.MapAsync(async c => new ConceptListItem(c, await BuildTree(c, depth - 1))).ToArrayAsync();
+        return new(complete);
     }
 
     void OnConceptSelected(ConceptId cid) {
         NavManager.NavigateTo($"/topic/{cid}");
     }
+    
+    readonly record struct ConceptListItem(Concept Concept, HashSet<ConceptListItem> SubConcepts);
 }

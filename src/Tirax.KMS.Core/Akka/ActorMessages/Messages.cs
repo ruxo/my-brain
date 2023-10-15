@@ -15,4 +15,9 @@ public static class Librarian
     {
         public sealed record Response(Concept? Concept);
     }
+
+    public sealed record GetConcepts(Seq<ConceptId> Ids)
+    {
+        public sealed record Response(Map<ConceptId,Concept> Concepts, Seq<ConceptId> Invalids);
+    }
 }

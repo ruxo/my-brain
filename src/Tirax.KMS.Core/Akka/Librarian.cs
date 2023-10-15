@@ -22,6 +22,10 @@ public sealed class Librarian : ReceiveActor, IWithStash
         
         Receive<GetRoot>(_ => Sender.Tell(new GetRoot.Response(root)));
         ReceiveAsync<GetConcept>(async req => Sender.Tell(new GetConcept.Response(await Fetch(req.Id))));
+        ReceiveAsync<GetConcepts>(async req => {
+            var (r, invalids) = await Fetch(req.Ids);
+            Sender.Tell(new GetConcepts.Response(r, invalids));
+        });
     }
 
     async ValueTask<Concept?> Fetch(ConceptId id) {
@@ -35,6 +39,14 @@ public sealed class Librarian : ReceiveActor, IWithStash
             }
             return null;
         }
+    }
+
+    async ValueTask<(Map<ConceptId, Concept>, Seq<ConceptId>)> Fetch(Seq<ConceptId> ids) {
+        var (existed, notInCache) = ids.Map(id => (id, concept: state.Concepts.Get(id)))
+                                       .Partition(result => result.concept.IsSome, r => r.concept.Get(), r => r.id);
+        var (fromDb, invalids) = await db.Read(q => q.FetchConcepts(notInCache.ToSeq()));
+        state = fromDb.Fold(state, (s, concept) => s with{ Concepts = s.Concepts.Add(concept.Id, concept) });
+        return (Seq(existed).Append(fromDb).Map(c => (c.Id, c)).ToMap(), invalids);
     }
     
     #region Messages

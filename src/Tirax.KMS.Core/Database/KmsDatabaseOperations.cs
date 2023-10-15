@@ -49,11 +49,13 @@ public static class KmsDatabaseOperations
                             .Where(Call("elementId", Var("concept")) == Param("conceptId")));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ValueTask<(Seq<Concept> Result, Seq<ConceptId> Invalids)> FetchConcepts(this IQueryRunner runner, Seq<ConceptId> conceptIds) => 
-        runner.Fetch(FetchConceptsQuery, Materialization.ToConcept, conceptIds);
+    public static ValueTask<(Seq<Concept> Result, Seq<ConceptId> Invalids)> FetchConcepts(this IQueryRunner runner, Seq<ConceptId> conceptIds) =>
+        conceptIds.Any()
+            ? runner.Fetch(FetchConceptsQuery, Materialization.ToConcept, conceptIds)
+            : new((Seq.empty<Concept>(), Seq.empty<ConceptId>()));
 
     static readonly string FetchConceptsQuery =
-        ReturnConcept(Cypher.Match(("owner", "Concept"))
+        ReturnConcept(Cypher.Match(("concept", "Concept"))
                             .Where(Contains(Call("elementId", Var("concept")), Param("ids"))));
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
