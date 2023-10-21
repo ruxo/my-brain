@@ -37,8 +37,14 @@
             <MudTabPanel Text="Ideas">
                 ideas
             </MudTabPanel>
-            </MudTabs>
+        </MudTabs>
     </MudStack>
+    <div style="position: fixed; bottom: 0; left: 0; width: 100%">
+        <MudContainer MaxWidth="@App.MaxWidth" Class="d-flex pb-4">
+            <MudSpacer />
+            <MudFab StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Label="Concept"/>
+        </MudContainer>
+    </div>
 </AuthorizeView>
 
 @code {
