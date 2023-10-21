@@ -1,8 +1,21 @@
 ﻿using MudBlazor;
+using ReactiveUI;
 
 namespace Tirax.KMS.App;
 
-public sealed class Session
+public sealed class Session : ReactiveObject
 {
-    public List<BreadcrumbItem> Breadcrumbs { get; set; } = new();
+    readonly ObservableAsPropertyHelper<bool> drawerIsOpenProp;
+
+    public bool DrawerIsOpen => drawerIsOpenProp.Value;
+
+    public List<BreadcrumbItem> Breadcrumbs { get; } = new();
+    
+    public ReactiveCommand<bool,bool> ToggleDrawer { get; }
+
+    public Session() {
+        ToggleDrawer = ReactiveCommand.Create<bool,bool>(identity);
+
+        drawerIsOpenProp = ToggleDrawer.ToProperty(this, v => v.DrawerIsOpen, scheduler: RxApp.MainThreadScheduler);
+    }
 }

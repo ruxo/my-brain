@@ -1,0 +1,22 @@
+﻿@using Tirax.KMS.Extensions
+
+@inject Session Session
+
+<SearchBar Placeholder="Search concept">
+    <AdornmentStart>
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" OnClick="ToggleDrawer"/>
+    </AdornmentStart>
+    <AdornmentEnd>
+        <AuthorizeView>
+            <MudAvatar Color="Color.Inherit">@context.User.GetShortName()</MudAvatar>
+        </AuthorizeView>
+    </AdornmentEnd>
+</SearchBar>
+
+@code {
+    
+    async Task ToggleDrawer() {
+        await Session.ToggleDrawer.Execute(!Session.DrawerIsOpen).ToTask();
+    }
+
+}

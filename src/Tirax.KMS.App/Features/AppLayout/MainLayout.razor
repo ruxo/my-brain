@@ -1,9 +1,23 @@
-﻿@inherits LayoutComponentBase
+﻿@using System.Runtime.CompilerServices
+@inherits ReactiveSharedLayoutComponent<Session>
+
+@inject Session Session
 
 <MudThemeProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
+<Drawer IsOpen="Session.DrawerIsOpen" IsOpenChanged="OnIsOpenChanged" />
 <MudContainer MaxWidth="@App.MaxWidth" Class="pa-0">
-@Body
+    @Body
 </MudContainer>
+
+@code {
+
+    protected override Session ViewModel => Session;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    Task OnIsOpenChanged(bool value) => 
+        Session.ToggleDrawer.Execute(value).ToTask();
+
+}
