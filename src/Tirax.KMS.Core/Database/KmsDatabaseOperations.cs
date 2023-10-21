@@ -42,10 +42,10 @@ public static class KmsDatabaseOperations
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ValueTask<Concept?> FetchConcept(this IQueryRunner runner, ConceptId conceptId) => 
-        runner.TryGetSingle(FetchConceptQuery, Materialization.ToConcept, new{ conceptId });
+        runner.TryGetSingle(FetchConceptQuery, Materialization.ToConcept, new{ conceptId=conceptId.Value });
 
     static readonly string FetchConceptQuery =
-        ReturnConcept(Cypher.Match(("owner", "Concept"))
+        ReturnConcept(Cypher.Match(("concept", "Concept"))
                             .Where(Call("elementId", Var("concept")) == Param("conceptId")));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
