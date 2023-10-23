@@ -1,6 +1,4 @@
 ﻿@page "/"
-@using global::Akka.Actor
-@using Tirax.KMS.Akka.ActorMessages
 
 @attribute [AllowAnonymous]
 @inject NavigationManager NavManager
@@ -20,8 +18,8 @@ rounded-tl-0 rounded-tr-0 rounded-bl-lg rounded-br-lg">
 @code {
 
     async Task GoHome() {
-        var res = await AppFacade.PublicLibrarian.Ask<Librarian.GetRoot.Response>(Librarian.GetRoot.Default);
-        NavManager.NavigateTo($"/topic/{res.Root.Id}");
+        var root = await AppFacade.PublicLibrary.GetRoot();
+        NavManager.NavigateTo($"/topic/{root.Id}");
     }
 
 }

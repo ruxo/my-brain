@@ -22,42 +22,49 @@ public sealed class Librarian : ReceiveActor, IWithStash
                     Map.empty<ConceptId, LinkObject>(),
                     Map.empty<ConceptId, Seq<ConceptId>>());
         
-        Receive<GetRoot>(_ => Sender.Tell(new GetRoot.Response(root)));
-        ReceiveAsync<GetConcept>(async req => Sender.Tell(new GetConcept.Response(await Fetch(req.Id))));
+        Receive<GetRoot>(_ => Sender.Tell(state.Concepts[state.Root]));
+        ReceiveAsync<GetConcept>(async req => Sender.Tell(await Fetch(req.Id)));
         ReceiveAsync<GetConcepts>(async req => {
-            var (r, invalids) = await Fetch(req.Ids);
-            Sender.Tell(new GetConcepts.Response(r, invalids));
+            var outcome = await Fetch(req.Ids);
+            Sender.Tell(outcome.Map(r => new GetConcepts.Response(r.Valid, r.Invalid)));
         });
         
         ReceiveAsync<AddConcept>(async req => Sender.Tell(await AddConcept(req.Owner, req.Name)));
     }
 
-    async ValueTask<Concept?> Fetch(ConceptId id) {
+    async ValueTask<Outcome<Option<Concept>>> Fetch(ConceptId id) {
         if (state.Concepts.Get(id).IfSome(out var v))
-            return v;
+            return Some(v);
         else {
-            var concept = await db.Read(q => q.FetchConcept(id));
-            if (concept is not null) {
-                state = state with{ Concepts = state.Concepts.Add(id, concept) };
-                return concept;
-            }
-            return null;
+            var outcome = await Outcome.Of(() => db.Read(q => q.FetchConcept(id)));
+            var concept = outcome.Result.Match(identity, _ => None);
+            if (concept.IfSome(out var c))
+                state = state with{ Concepts = state.Concepts.Add(id, c) };
+            return outcome;
         }
     }
 
-    async ValueTask<FetchResult> Fetch(Seq<ConceptId> ids) {
-        var (existed, notInCache) = ids.Map(id => (id, concept: state.Concepts.Get(id)))
-                                       .Partition(result => result.concept.IsSome, r => r.concept.Get(), r => r.id);
-        var (fromDb, invalids) = await db.Read(q => q.FetchConcepts(notInCache.ToSeq()));
-        state = fromDb.Fold(state, (s, concept) => s with{ Concepts = s.Concepts.Add(concept.Id, concept) });
-        return new(Seq(existed).Append(fromDb).Map(c => (c.Id, c)).ToMap(), invalids);
+    async ValueTask<Outcome<FetchResult>> Fetch(Seq<ConceptId> ids) {
+        try {
+            var (existed, notInCache) = ids.Map(id => (id, concept: state.Concepts.Get(id)))
+                                           .Partition(result => result.concept.IsSome, r => r.concept.Get(), r => r.id);
+            var (fromDb, invalids) = await db.Read(q => q.FetchConcepts(notInCache.ToSeq()));
+            state = fromDb.Fold(state, (s, concept) => s with{ Concepts = s.Concepts.Add(concept.Id, concept) });
+            return new FetchResult(Seq(existed).Append(fromDb).Map(c => (c.Id, c)).ToMap(), invalids);
+        }
+        catch (Exception e) {
+            return ErrorFrom.Exception(e);
+        }
     }
 
     readonly record struct FetchResult(Map<ConceptId, Concept> Valid, Seq<ConceptId> Invalid);
 
     async ValueTask<Outcome<Concept>> AddConcept(ConceptId ownerId, string name) {
         if (state.Concepts.Get(ownerId).IfSome(out var owner)) {
-            var (subConcepts, invalids) = await Fetch(owner.Contains.ToSeq());
+            var outcome = await Fetch(owner.Contains.ToSeq());
+            if (outcome.IfFaulted(out var error, out var result)) return error;
+            
+            var (subConcepts, invalids) = result;
             Debug.Assert(invalids.IsEmpty);
             if (subConcepts.Values.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 return ErrorInfo.Of(ErrorCodes.InvalidRequest, "Name is duplicated");
@@ -72,7 +79,7 @@ public sealed class Librarian : ReceiveActor, IWithStash
     }
 
     readonly record struct State(
-        ConceptId? Root,
+        ConceptId Root,
         Map<ConceptId, ConceptTag> Tags,
         Map<ConceptId, Concept> Concepts,
         Map<ConceptId, LinkObject> Links,

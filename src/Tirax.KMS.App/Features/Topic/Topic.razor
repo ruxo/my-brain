@@ -59,23 +59,46 @@
     HashSet<ConceptListItem> subConcepts;
 
     protected override async Task OnParametersSetAsync() {
-        var response = await AppFacade.PublicLibrarian.Ask<Librarian.GetConcept.Response>(new Librarian.GetConcept(TopicId));
-
-        currentConcept = response.Concept;
-        if (currentConcept is not null) {
-            Session.Breadcrumbs.Add(new(currentConcept.Name, currentConcept.Id));
-            subConcepts = await BuildTree(currentConcept, 3);
+        var outcome = await AppFacade.PublicLibrary.GetConcept(TopicId);
+        if (outcome.IfFaulted(out var error, out var concept)) {
+            Snackbar.Add(error.Message, Severity.Error);
+            return;
         }
+        if (concept.IsNone) return;
+
+        currentConcept = concept.Get();
+        var treeOutcome = await BuildTree(currentConcept, 3);
+        if (treeOutcome.IfSuccess(out var subConcepts, out error)) {
+            Session.Breadcrumbs.Add(new(currentConcept.Name, currentConcept.Id));
+            this.subConcepts = subConcepts;
+        }
+        else
+            Snackbar.Add(error.Message, Severity.Error);
     }
 
-    async ValueTask<HashSet<ConceptListItem>> BuildTree(Concept source, int depth) {
-        if (depth == 0) return new();
+    async ValueTask<Outcome<HashSet<ConceptListItem>>> BuildTree(Concept source, int depth) {
+        if (depth == 0) return new HashSet<ConceptListItem>();
 
-        var (subConcepts, invalids) = await AppFacade.PublicLibrarian.Ask<Librarian.GetConcepts.Response>(new Librarian.GetConcepts(source.Contains.ToSeq()));
-        Debug.Assert(invalids.IsEmpty);
+        var outcome = await AppFacade.PublicLibrary.GetConcepts(source.Contains.ToSeq());
+        if (outcome.IfSuccess(out var result, out var error)) {
+            Debug.Assert(result.Invalids.IsEmpty);
 
-        var complete = await subConcepts.Values.MapAsync(async c => new ConceptListItem(c, await BuildTree(c, depth - 1))).ToArrayAsync();
-        return new(complete);
+            var subTreeSequence = result.Concepts.Values.MapAsync(async c => {
+                var subTree = await BuildTree(c, depth - 1);
+                return subTree.Map(tree => new ConceptListItem(c, tree));
+            });
+
+            var subList = new HashSet<ConceptListItem>();
+            await foreach(var item in subTreeSequence)
+                if (item.IfFaulted(out error, out var i))
+                    return error;
+                else
+                    subList.Add(i);
+                    
+            return subList;
+        }
+        else
+            return error;
     }
 
     void OnConceptSelected(ConceptId cid) {
@@ -86,7 +109,7 @@
         var result = await DialogService.ShowDialog<AddDialog, string>("Add concept");
         if (result.IfSome(out var name)) {
             isLoading = true;
-            var addResult = await AppFacade.PublicLibrarian.Ask<Outcome<Concept>>(new Librarian.AddConcept(TopicId, name));
+            var addResult = await AppFacade.PublicLibrary.AddConcept(TopicId, name);
             if (addResult.Result.IfRight(out var newConcept, out var error))
                 OnConceptSelected(newConcept.Id);
             else

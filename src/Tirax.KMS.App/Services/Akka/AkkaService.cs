@@ -14,8 +14,8 @@ public sealed class AkkaService : IHostedService, IAppFacade
     readonly IServiceProvider serviceProvider;
     readonly Lazy<ActorSystem> system;
     
-    public IActorRef PublicLibrarian { get; private set; } = ActorRefs.Nobody;
-    
+    public LibraryFacade PublicLibrary { get; private set; } = new(ActorRefs.Nobody);
+
     public AkkaService(IServiceProvider serviceProvider, IHostApplicationLifetime appLifetime) {
         this.serviceProvider = serviceProvider;
         system = new(() => {
@@ -36,8 +36,9 @@ public sealed class AkkaService : IHostedService, IAppFacade
             
         var db = serviceProvider.GetRequiredService<INeo4JDatabase>();
         var (root, tags) = await db.Read(async q => (await q.GetHome(), await q.GetTags()));
-
-        PublicLibrarian = sys.ActorOf(Props.Create(() => new Librarian(db, root, tags)), "public-librarian");
+        
+        var publicLibrarian = sys.ActorOf(Props.Create(() => new Librarian(db, root, tags)), "public-librarian");
+        PublicLibrary = new(publicLibrarian);
         
         var resolver = DependencyResolver.For(sys);
         var workerProps = resolver.Props<ScheduledWorker>();

@@ -217,9 +217,9 @@ public sealed partial class KmsServer : IKmsServer
             
             var concept = await session.Read(q => q.FetchConcept(id));
             var newState = state with{
-                Concepts = Optional(concept).Map(c => state.Concepts.Add(c.Id, c)).IfNone(state.Concepts)
+                Concepts = concept.Map(c => state.Concepts.Add(c.Id, c)).IfNone(state.Concepts)
             };
-            return (newState, new(concept));
+            return (newState, new(concept.ToNullable()));
         };
 
         public static TransactionResult<Seq<Concept>> Fetch(INeo4JTransaction session, Seq<ConceptId> ids) =>

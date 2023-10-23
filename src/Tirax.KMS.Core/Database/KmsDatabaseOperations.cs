@@ -41,7 +41,7 @@ public static class KmsDatabaseOperations
               .Return(Direct(Var("concept")), Alias("contains", SelectNone()), Alias("links", SelectNone()), Alias("tags", SelectNone()));
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ValueTask<Concept?> FetchConcept(this IQueryRunner runner, ConceptId conceptId) => 
+    public static ValueTask<Option<Concept>> FetchConcept(this IQueryRunner runner, ConceptId conceptId) => 
         runner.TryGetSingle(FetchConceptQuery, Materialization.ToConcept, new{ conceptId=conceptId.Value });
 
     static readonly string FetchConceptQuery =
@@ -129,14 +129,16 @@ public static class KmsDatabaseOperations
                      PropSet((Field("t", "startTime"), Param("startTime")), (Field("t", "uptime"), Param("uptime"))),
                      PropSet((Field("t", "startTime"), Param("startTime")), (Field("t", "uptime"), Param("uptime"))));
 
-    static async ValueTask<T?> TryGetSingle<T>(this IQueryRunner runner, string query, Func<IRecord, T> mapper, object? @params = null) {
+    static async ValueTask<Option<T>> TryGetSingle<T>(this IQueryRunner runner, string query, Func<IRecord, T> mapper, object? @params = null) {
         var cursor = await runner.Read(query, @params);
-        return await cursor.FetchAsync() ? mapper(cursor.Current) : default;
+        return await cursor.FetchAsync() ? mapper(cursor.Current) : None;
     }
 
-    static async ValueTask<T> GetSingle<T>(this IQueryRunner runner, string query, Func<IRecord, T> mapper, object? @params = null) => 
-        await runner.TryGetSingle(query, mapper, @params) ?? throw new InvalidOperationException("Impossible case");
-    
+    static async ValueTask<T> GetSingle<T>(this IQueryRunner runner, string query, Func<IRecord, T> mapper, object? @params = null) {
+        var result = await runner.TryGetSingle(query, mapper, @params);
+        return result.IfSome(out var data)? data : throw new InvalidOperationException("Result contains more than a single instance");
+    }
+
     static async ValueTask<Seq<T>> GetSequence<T>(this IQueryRunner runner, string q, Func<IRecord, T> mapper, object? @params = null) {
         var cursor = await runner.Read(q, @params);
         return Seq(await cursor.ToArrayAsync()).Map(mapper);
