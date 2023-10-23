@@ -4,7 +4,7 @@
 @inject Session Session
 
 <MudThemeProvider />
-<MudDialogProvider />
+<MudDialogProvider MaxWidth="MaxWidth.Medium" DisableBackdropClick="true" />
 <MudSnackbarProvider />
 
 <Drawer IsOpen="Session.DrawerIsOpen" IsOpenChanged="OnIsOpenChanged" />

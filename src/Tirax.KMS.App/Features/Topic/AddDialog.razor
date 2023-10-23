@@ -1,38 +1,39 @@
-﻿<MudDialog>
-    <TitleContent>
-        <MudText Typo="Typo.h3">Add new concept</MudText>
-    </TitleContent>
+﻿@implements Tirax.KMS.App.Extensions.IDialog<string>
+
+<MudDialog Class="rounded-xl">
     <DialogContent>
-        <MudGrid Class="mb-2">
-            <MudItem xs="12" sm="7">
-                <MudPaper Class="pa-4">
-                    <MudForm @ref="form" @bind-Errors="errors">
-                        <MudTextField Required="true" RequiredError="Concept name is required"
-                                      @bind-Value="conceptName" Immediate="true"
-                                      Label="Concept"
-                        />
-                    </MudForm>
-                    <div class="mt-4 d-flex justify-space-between">
-                        <MudButton Color="Color.Error" OnClick="CancelDialog">Cancel</MudButton>
-                        <MudButton Color="Color.Primary" Variant="Variant.Filled"
-                                   Disabled="HasErrors"
-                                   OnClick="ConfirmSave">Create</MudButton>
-                    </div>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="12" sm="5">
-                <MudPaper Class="pa-4 mud-height-full">
-                    @if (HasErrors) {
-                        <MudText Typo="Typo.subtitle2">@errors.Length error(s).</MudText>
-                        foreach (var e in errors) {
-                            <MudText Color="Color.Error">@e</MudText>
-                        }
-                    }
-                    else {
-                        <MudText Typo="Typo.subtitle2">No errors.</MudText>
-                    }
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+        <MudForm @ref="form" @bind-Errors="errors">
+            <MudTextField Required="true" RequiredError="Concept name is required"
+                          @bind-Value="conceptName" Immediate="true"
+                          Label="Concept" />
+        </MudForm>
     </DialogContent>
+    <DialogActions>
+        <MudButton StartIcon="@Icons.Material.Filled.Close" Color="Color.Primary" OnClick="CancelDialog">Cancel</MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Disabled="HasErrors"
+                   OnClick="ConfirmSave">Add</MudButton>
+    </DialogActions>
 </MudDialog>
+
+@code {
+
+    string conceptName = string.Empty;
+    string[] errors = Array.Empty<string>();
+    MudForm form = default!;
+
+    [CascadingParameter]
+    public MudDialogInstance MudDialog { get; set; } = default!;
+
+    bool HasErrors => errors.Length > 0;
+    
+    void CancelDialog() {
+        MudDialog.Cancel();
+    }
+
+    async Task ConfirmSave() {
+        await form.Validate();
+        if (!form.Errors.Any())
+            MudDialog.Close(conceptName);
+    }
+
+}

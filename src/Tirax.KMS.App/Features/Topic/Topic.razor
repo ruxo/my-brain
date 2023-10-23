@@ -1,12 +1,16 @@
 ﻿@page "/topic/{TopicId}"
 @using global::Akka.Actor
 @using System.Diagnostics
+@using TCRB.CoreApp
 @using Tirax.KMS.Domain
 @using Tirax.KMS.Akka.ActorMessages
+@using Tirax.KMS.App.Extensions
 @using Tirax.KMS.App.Features.Search
 @attribute [Authorize]
 
 @inject NavigationManager NavManager
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject IAppFacade AppFacade
 @inject Session Session
 
@@ -37,9 +41,12 @@
     <div style="position: fixed; bottom: 0; left: 0; width: 100%">
         <MudContainer MaxWidth="@App.MaxWidth" Class="d-flex pb-4">
             <MudSpacer />
-            <MudFab StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Label="Concept"/>
+            <MudFab StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Label="Concept" OnClick="OnAddConcept"/>
         </MudContainer>
     </div>
+    <MudOverlay Visible="isLoading" DarkBackground="true" Absolute="true">
+        <MudProgressCircular Indeterminate="true" />
+    </MudOverlay>
 </AuthorizeView>
 
 @code {
@@ -47,6 +54,7 @@
     [Parameter]
     public required string TopicId { get; set; }
 
+    bool isLoading;
     Concept? currentConcept;
     HashSet<ConceptListItem> subConcepts;
 
@@ -73,6 +81,19 @@
     void OnConceptSelected(ConceptId cid) {
         NavManager.NavigateTo($"/topic/{cid}");
     }
-    
+
+    async Task OnAddConcept() {
+        var result = await DialogService.ShowDialog<AddDialog, string>("Add concept");
+        if (result.IfSome(out var name)) {
+            isLoading = true;
+            var addResult = await AppFacade.PublicLibrarian.Ask<Outcome<Concept>>(new Librarian.AddConcept(TopicId, name));
+            if (addResult.Result.IfRight(out var newConcept, out var error))
+                OnConceptSelected(newConcept.Id);
+            else
+                Snackbar.Add(error.Message, Severity.Error);
+            isLoading = false;
+        }
+    }
+
     readonly record struct ConceptListItem(Concept Concept, HashSet<ConceptListItem> SubConcepts);
 }

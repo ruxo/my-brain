@@ -1,6 +1,6 @@
 <Project>
     <ItemGroup>
-        <PackageReference Include="LanguageExt.Core" Version="4.4.6" />
+        <PackageReference Include="LanguageExt.Core" Version="4.4.7" />
         <PackageReference Include="RZ.Foundation" Version="6.1.2" />
         <PackageReference Include="MinVer" Version="4.3.0">
             <PrivateAssets>all</PrivateAssets>

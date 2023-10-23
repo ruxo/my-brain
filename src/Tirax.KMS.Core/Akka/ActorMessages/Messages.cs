@@ -20,4 +20,6 @@ public static class Librarian
     {
         public sealed record Response(Map<ConceptId,Concept> Concepts, Seq<ConceptId> Invalids);
     }
+
+    public readonly record struct AddConcept(ConceptId Owner, string Name);
 }
